@@ -8,7 +8,7 @@ Small js fullstack framework blazly fast
     - Everything on src folder
     - Create apis, websockets, server files and preact components
     - SPA routing which makes the site so fast (Using Flamethrower)
-    
+
 ## what you can do with Ryo js:
 
 * Routing system: Based on filesystem, you can build dynamic route, naming file with ":" prefix
@@ -31,7 +31,7 @@ Small js fullstack framework blazly fast
 * Websockets: naming the with ".ws.js" suffix:
     - Return object match uWebSockets.js documentation
 
-## Example:
+## Example: (All demos on src folder)
 
 ### websockets:
 ```js
@@ -263,6 +263,11 @@ export default function index({ ...props }) {
 }
 ```
 
+### Build & serve
+
+```bash
+npm run build && npm run start
+```
 
 ## Library Using:
 
