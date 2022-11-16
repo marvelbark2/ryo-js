@@ -1,15 +1,19 @@
 {
   "name": "ryo.js",
   "version": "1.0.0",
-  "description": "",
+  "description": "Fullstack framework",
   "scripts": {
     "start": "node lib/index.module.js",
     "build": "node ./lib/build/index.mjs",
     "postbuild": "postcss ./src/tailwind.css -o ./.ssr/output/static/styles.css"
   },
   "keywords": [],
-  "author": "",
+  "author": "Youness Masaoudi",
   "license": "ISC",
+  "main": "index.js",
+  "bin": {
+    "ryo": "./index.js"
+  },
   "devDependencies": {
     "@chialab/esbuild-plugin-postcss": "^0.17.2",
     "@luncheon/esbuild-plugin-gzip": "^0.1.0",
