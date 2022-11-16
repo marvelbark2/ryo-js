@@ -1,10 +1,14 @@
 {
   "name": "ryo.js",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Fullstack framework",
   "scripts": {
     "start": "node lib/index.module.js",
-    "build": "node ./lib/build/index.mjs",
+    "build:app": "node ./lib/build/index.mjs",
+    "build": "npm run build:es2020 && npm run build:esm && npm run build:cjs",
+    "build:es2020": "tsc --module es2020 --target es2020 --outDir dist/es2020",
+    "build:esm": "tsc --module es2020 --target es5 --outDir dist/esm",
+    "build:cjs": "tsc --module commonjs --target es5 --outDir dist/cjs --isolatedModules true",
     "postbuild": "postcss ./src/tailwind.css -o ./.ssr/output/static/styles.css"
   },
   "keywords": [],
@@ -12,11 +16,23 @@
   "license": "ISC",
   "main": "index.js",
   "bin": {
-    "ryo": "./index.js"
+    "ryo": "./dist/cjs/index.js"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.20.2",
+    "@babel/plugin-transform-react-jsx": "^7.19.0",
+    "@babel/preset-env": "^7.20.2",
+    "@babel/register": "^7",
+    "esbuild": "^0.15.13",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.15.0"
   },
   "devDependencies": {
+    "@babel/preset-env": "^7.20.2",
     "@chialab/esbuild-plugin-postcss": "^0.17.2",
     "@luncheon/esbuild-plugin-gzip": "^0.1.0",
+    "@types/babel__register": "^7.17.0",
+    "@types/node": "^18.11.9",
+    "@types/node-fetch": "^2.6.2",
     "autoprefixer": "^10.4.13",
     "babel-preset-es2015": "^6.24.1",
     "babel-preset-preact": "^2.0.0",
@@ -24,21 +40,40 @@
     "esbuild": "^0.15.13",
     "postcss": "^8.4.19",
     "prisma": "^4.6.1",
-    "tailwindcss": "^3.2.4"
+    "tailwindcss": "^3.2.4",
+    "typescript": "^4.9.3"
   },
   "dependencies": {
     "@babel/core": "^7.20.2",
     "@babel/plugin-transform-react-jsx": "^7.19.0",
-    "@babel/preset-env": "^7.20.2",
-    "@babel/register": "^7.18.9",
+    "@babel/register": "^7",
     "@prisma/client": "^4.6.1",
     "flamethrower-router": "^0.0.0-meme.12",
+    "module-from-string": "^3.3.0",
     "node-fetch": "^2.6.7",
     "postcss-cli": "^10.0.0",
     "preact": "^10.11.2",
     "preact-render-to-string": "^5.2.6",
     "react": "npm:@preact/compat",
     "react-dom": "npm:@preact/compat",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.15.0"
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.15.0",
+    "@babel/preset-env": "^7.20.2"
+  },
+  "files": [
+    "dist",
+    "src",
+    "bin",
+    "lib",
+    "package.json",
+    "package-lock.json",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/cjs/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/cjs/index.js"
+    },
+    "./package.json": "./package.json"
   }
 }

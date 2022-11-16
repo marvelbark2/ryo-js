@@ -3,5 +3,6 @@
         "targets": {
             "node": "current"
         }
-    }], "preact"]
+    }], "preact"],
+    "sourceType": "unambiguous"
 }
