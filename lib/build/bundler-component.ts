@@ -75,11 +75,15 @@ export async function generateClientBundle({
 }: { filePath: string; outdir?: string; pageName: string; bundleConstants?: any }) {
     try {
         return await build({
+            ...bundleConstants,
             bundle: true,
             minify: true,
             treeShaking: true,
             write: false,
-            entryPoints: [filePath],
+            stdin: {
+                contents: getHydrationScript(filePath, pageName),
+                resolveDir: process.cwd(),
+            },
             plugins: [compress({ gzip: true })],
             target: "esnext",
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),

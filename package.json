@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "description": "Fullstack framework",
   "scripts": {
     "start": "node lib/index.module.js",
