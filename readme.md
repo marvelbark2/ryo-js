@@ -5,8 +5,8 @@ Small js fullstack framework blazly fast
 ## Installation
 
 ```sh
-    npm i ryo.js
-    npm i @babel/preset-env babel-preset-preact -D
+npm i ryo.js
+npm i @babel/preset-env babel-preset-preact -D
 ```
 
 ## Features:

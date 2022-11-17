@@ -57,7 +57,7 @@ function generateServerScript(_a) {
         loader: { ".ts": "ts", ".js": "js" },
     } : _c;
     return __awaiter(this, void 0, void 0, function () {
-        var isWS, out, result, e_1;
+        var isWS, out, e_1;
         return __generator(this, function (_d) {
             switch (_d.label) {
                 case 0:
@@ -67,10 +67,7 @@ function generateServerScript(_a) {
                     _d.trys.push([1, 3, , 4]);
                     out = (0, path_1.join)(outdir, isWS ? "ws" : ".", "".concat(pageName, ".js"));
                     return [4 /*yield*/, (0, esbuild_1.build)(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", outfile: out, allowOverwrite: false }))];
-                case 2:
-                    result = _d.sent();
-                    console.log({ result: result });
-                    return [2 /*return*/, result];
+                case 2: return [2 /*return*/, _d.sent()];
                 case 3:
                     e_1 = _d.sent();
                     console.error(e_1);

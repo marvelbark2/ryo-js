@@ -54,11 +54,12 @@ globalThis.register = register_1.default;
 });
 var args = process.argv.slice(2);
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var buildReport, data, jsonReportPath;
+    var before, buildReport, data, jsonReportPath;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
                 if (!args.includes("build")) return [3 /*break*/, 2];
+                before = new Date().getTime();
                 return [4 /*yield*/, (0, build_1.default)()];
             case 1:
                 buildReport = _a.sent();
@@ -66,6 +67,7 @@ var args = process.argv.slice(2);
                 console.log("🕧 Building pages report");
                 jsonReportPath = (0, path_1.join)(process.cwd(), ".ssr/build-report.json");
                 (0, fs_1.writeFileSync)(jsonReportPath, Buffer.from(data), { flag: "wx" });
+                console.log("\n✅ Build completed in " + (new Date().getTime() - before) + "ms");
                 return [3 /*break*/, 3];
             case 2:
                 if (args.includes("start")) {

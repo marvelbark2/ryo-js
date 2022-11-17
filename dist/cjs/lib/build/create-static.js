@@ -80,7 +80,6 @@ function createStaticFile(Component, filePath, pageName, options) {
                 case 2:
                     _a.trys.push([2, 8, , 9]);
                     App = Component.default || Component;
-                    console.log({ App: App });
                     data = null;
                     if (!((options === null || options === void 0 ? void 0 : options.data) && Component.data)) return [3 /*break*/, 7];
                     if (!(typeof Component.data === "function")) return [3 /*break*/, 3];

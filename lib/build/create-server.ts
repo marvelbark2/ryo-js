@@ -14,7 +14,7 @@ export async function generateServerScript({
     const isWS = comp.endsWith(".ws.js");
     try {
         const out = join(outdir, isWS ? "ws" : ".", `${pageName}.js`)
-        const result = await build({
+        return await build({
             ...bundleConstants,
             entryPoints: [comp],
             bundle: true,
@@ -23,10 +23,6 @@ export async function generateServerScript({
             outfile: out,
             allowOverwrite: false
         });
-
-        console.log({ result })
-
-        return result;
     } catch (e) {
         console.error(e);
     }

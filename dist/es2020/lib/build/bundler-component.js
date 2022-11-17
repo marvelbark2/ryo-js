@@ -67,7 +67,6 @@ export async function generateClientBundle({ filePath, outdir = ".ssr/output/sta
     write: false
 } }) {
     try {
-        const resolved = __dirname.split("preact-ssr")[0] + "preact-ssr";
         return await build({
             bundle: true,
             minify: true,

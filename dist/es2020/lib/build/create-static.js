@@ -23,7 +23,6 @@ export async function createStaticFile(Component, filePath, pageName, options = 
     }
     try {
         const App = Component.default || Component;
-        console.log({ App });
         let data = null;
         if (options?.data && Component.data) {
             if (typeof Component.data === "function") {

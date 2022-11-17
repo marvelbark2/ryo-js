@@ -64,12 +64,11 @@ function generateClientBundle(_a) {
         write: false
     } : _c;
     return __awaiter(this, void 0, void 0, function () {
-        var resolved, e_1;
+        var e_1;
         return __generator(this, function (_d) {
             switch (_d.label) {
                 case 0:
                     _d.trys.push([0, 2, , 3]);
-                    resolved = __dirname.split("preact-ssr")[0] + "preact-ssr";
                     return [4 /*yield*/, (0, esbuild_1.build)({
                             bundle: true,
                             minify: true,

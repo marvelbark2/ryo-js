@@ -33,7 +33,6 @@ export async function createStaticFile(
 
   try {
     const App = Component.default || Component;
-    console.log({ App })
     let data = null;
 
     if (options?.data && Component.data) {

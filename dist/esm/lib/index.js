@@ -275,9 +275,29 @@ export default function server() {
             return result;
         }
     };
+    var addParam = function (map, key, value, i) {
+        if (i === void 0) { i = 0; }
+        if (!map.has(key)) {
+            map.set(key, value);
+        }
+        else {
+            ++i;
+            addParam(map, key + i, value, i);
+        }
+    };
+    function getParams(req, pageName) {
+        var paths = pageName.split("/").filter(function (x) { return x.startsWith(":"); });
+        if (paths.length === 0)
+            return undefined;
+        return paths.reduce(function (acc, curr, i) {
+            var param = curr.replace(":", "");
+            addParam(acc, param, req.getParameter(i));
+            return acc;
+        }, new Map());
+    }
     function renderAPI(res, req, pageName) {
         return __awaiter(this, void 0, void 0, function () {
-            var method, module_1, body, api, dataCall, data, _a, e_2;
+            var method, module_1, body, api, params, dataCall, data, _a, e_2;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
@@ -300,9 +320,11 @@ export default function server() {
                         body = _b.sent();
                         _b.label = 2;
                     case 2:
+                        params = getParams(req, pageName);
                         dataCall = api({
                             url: pageName,
-                            body: body
+                            body: body,
+                            params: params ? Object.fromEntries(params) : undefined,
                         });
                         if (!(api.constructor.name === 'AsyncFunction')) return [3 /*break*/, 4];
                         return [4 /*yield*/, dataCall];

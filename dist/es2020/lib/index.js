@@ -219,6 +219,25 @@ export default function server() {
             return result;
         }
     };
+    const addParam = (map, key, value, i = 0) => {
+        if (!map.has(key)) {
+            map.set(key, value);
+        }
+        else {
+            ++i;
+            addParam(map, key + i, value, i);
+        }
+    };
+    function getParams(req, pageName) {
+        const paths = pageName.split("/").filter(x => x.startsWith(":"));
+        if (paths.length === 0)
+            return undefined;
+        return paths.reduce((acc, curr, i) => {
+            const param = curr.replace(":", "");
+            addParam(acc, param, req.getParameter(i));
+            return acc;
+        }, new Map());
+    }
     async function renderAPI(res, req, pageName) {
         try {
             const method = req.getMethod();
@@ -236,9 +255,11 @@ export default function server() {
                         });
                     });
                 }
+                const params = getParams(req, pageName);
                 const dataCall = api({
                     url: pageName,
-                    body: body
+                    body: body,
+                    params: params ? Object.fromEntries(params) : undefined,
                 });
                 const data = api.constructor.name === 'AsyncFunction' ? await dataCall : dataCall;
                 if (Object.keys(data).includes("stream")) {

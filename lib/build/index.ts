@@ -94,7 +94,6 @@ async function buildClient() {
                                 return generateSSRPages({ outdir: outWSdir, pageName, path: page });
                             }
                             console.timeEnd("🕧 Building: " + pageName);
-                            console.log("Static PAGE: ", page);
                             return createStaticFile(Component, page, pageName, { outdir, bundle: true, data: keys.includes("data") });
                         } else {
                             buildReport['/' + pageName] = true;

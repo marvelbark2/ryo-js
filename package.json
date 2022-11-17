@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "1.0.4",
+  "version": "0.0.5",
   "description": "Fullstack framework",
   "scripts": {
     "start": "node lib/index.module.js",
@@ -12,6 +12,11 @@
     "postbuild": "postcss ./src/tailwind.css -o ./.ssr/output/static/styles.css"
   },
   "keywords": [],
+
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marvelbark2/ryo-js"
+  },
   "author": "Youness Masaoudi",
   "license": "ISC",
   "main": "index.js",

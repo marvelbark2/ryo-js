@@ -116,7 +116,6 @@ function buildClient() {
                                         return (0, create_ssr_1.generateSSRPages)({ outdir: outWSdir_1, pageName: pageName, path: page });
                                     }
                                     console.timeEnd("🕧 Building: " + pageName);
-                                    console.log("Static PAGE: ", page);
                                     return (0, create_static_1.createStaticFile)(Component, page, pageName, { outdir: outdir_1, bundle: true, data: keys.includes("data") });
                                 }
                                 else {
