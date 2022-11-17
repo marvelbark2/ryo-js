@@ -1,3 +1,14 @@
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -36,25 +47,13 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 //import { createStaticFile } from './create-static'
 import register from "@babel/register";
-import jsx from "preact/jsx-runtime";
 var reg = function () { return register({
-    "presets": [
-        ["@babel/preset-env", {
-                targets: {
-                    node: "current",
-                },
-            }], "preact"
-    ],
+    extensions: [".ts", ".tsx", ".js", ".jsx"],
+    presets: ["@babel/preset-env", "preact"],
 }); };
 import { h, Fragment } from "preact";
-// @ts-ignore
-global['react/jsx-runtime'] = jsx;
-// @ts-ignore
-global.register = reg;
-// @ts-ignore
-global.h = h;
-// @ts-ignore
-global.Fragment = Fragment;
+Object.defineProperty(global, 'h', h);
+Object.defineProperty(global, 'Fragment', Fragment);
 import { rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getPageName, getPages } from '../utils/page';
@@ -63,6 +62,7 @@ import { createStaticFile } from "./create-static";
 import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
 import { transform } from "esbuild";
+import { importFromStringSync } from "module-from-string";
 var buildReport = {};
 function generateFrameworkJSBundle() {
     console.log("🕧 Building framework bundle");
@@ -96,13 +96,17 @@ var buildComponent = function (Component, page, pageName, outdir, outWSdir) { re
         return [2 /*return*/];
     });
 }); };
-function requireFromString(src, filename) {
-    var Module = module.constructor;
-    //@ts-ignore
-    var m = new Module();
-    m._compile(src, filename);
-    return m.exports;
-}
+var tsxTransformOptions = {
+    loader: 'tsx',
+    target: 'es2015',
+    format: 'cjs',
+    jsxFactory: 'h',
+    jsxFragment: 'Fragment',
+    jsxImportSource: 'preact',
+    minify: true,
+    jsx: 'automatic'
+};
+var hCode = "import { h } from 'preact';\n";
 function buildClient() {
     return __awaiter(this, void 0, void 0, function () {
         var pages, ssrdir, outdir_1, outWSdir_1, error_1;
@@ -129,20 +133,13 @@ function buildClient() {
                                 return generateServerScript({ comp: page, outdir: outWSdir_1, pageName: pageName });
                             }
                             else if (page.endsWith(".tsx")) {
-                                return transform(readFileSync(page).toString(), {
-                                    loader: 'tsx',
-                                    target: 'es2015',
-                                    format: 'cjs',
-                                    jsxFactory: 'h',
-                                    jsxFragment: 'Fragment',
-                                    jsxImportSource: 'preact',
-                                    minify: true,
-                                }).then(function (result) {
+                                // @ts-ignore
+                                return transform(readFileSync(page).toString(), tsxTransformOptions).then(function (result) {
                                     var code = result.code;
-                                    var Component = requireFromString(code, page);
-                                    console.log(Component);
+                                    // @ts-ignore
+                                    var Component = importFromStringSync(code, __assign(__assign({}, tsxTransformOptions), { filename: page }));
                                     return buildComponent(Component, page, pageName, outdir_1, outWSdir_1);
-                                });
+                                }).catch(function (e) { return console.error(e); });
                             }
                             // @ts-ignore
                             return import(page).then(function (Component) {

@@ -2,30 +2,16 @@
 
 //import { createStaticFile } from './create-static'
 import register from "@babel/register";
-import jsx from "preact/jsx-runtime";
 
 const reg = () => register({
-    "presets": [
-        ["@babel/preset-env", {
-            targets: {
-                node: "current",
-            },
-        }], "preact"
-    ],
+    extensions: [".ts", ".tsx", ".js", ".jsx"],
+    presets: ["@babel/preset-env", "preact"],
 
 })
 import { h, Fragment } from "preact";
 
-// @ts-ignore
-global['react/jsx-runtime'] = jsx;
-// @ts-ignore
-global.register = reg;
-
-// @ts-ignore
-global.h = h;
-
-// @ts-ignore
-global.Fragment = Fragment;
+Object.defineProperty(global, 'h', h);
+Object.defineProperty(global, 'Fragment', Fragment);
 
 import { rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
@@ -39,6 +25,7 @@ import { createStaticFile } from "./create-static";
 import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
 import { transform } from "esbuild";
+import { importFromStringSync } from "module-from-string";
 
 const buildReport: any = {};
 
@@ -74,14 +61,17 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
     }
 }
 
-function requireFromString(src: string, filename: string) {
-    var Module = module.constructor;
-    //@ts-ignore
-    var m = new Module();
-    m._compile(src, filename);
-    return m.exports;
+const tsxTransformOptions = {
+    loader: 'tsx',
+    target: 'es2015',
+    format: 'cjs',
+    jsxFactory: 'h',
+    jsxFragment: 'Fragment',
+    jsxImportSource: 'preact',
+    minify: true,
+    jsx: 'automatic'
 }
-
+const hCode = "import { h } from 'preact';\n"
 async function buildClient() {
     try {
         const pages = getPages(join(process.cwd(), "src"), join);
@@ -105,19 +95,16 @@ async function buildClient() {
                         console.timeEnd("🕧 Building: " + pageName);
                         return generateServerScript({ comp: page, outdir: outWSdir, pageName });
                     } else if (page.endsWith(".tsx")) {
-                        return transform(readFileSync(page).toString(), {
-                            loader: 'tsx',
-                            target: 'es2015',
-                            format: 'cjs',
-                            jsxFactory: 'h',
-                            jsxFragment: 'Fragment',
-                            jsxImportSource: 'preact',
-                            minify: true,
-                        }).then((result) => {
+                        // @ts-ignore
+                        return transform(readFileSync(page).toString(), tsxTransformOptions).then((result) => {
                             const code = result.code;
-                            const Component = requireFromString(code, page);
+                            // @ts-ignore
+                            const Component = importFromStringSync(code, {
+                                ...tsxTransformOptions,
+                                filename: page
+                            });
                             return buildComponent(Component, page, pageName, outdir, outWSdir);
-                        })
+                        }).catch(e => console.error(e));
                     }
                     // @ts-ignore
                     return import(page).then((Component) => {

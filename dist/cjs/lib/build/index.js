@@ -1,4 +1,15 @@
 "use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -64,25 +75,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 //import { createStaticFile } from './create-static'
 var register_1 = __importDefault(require("@babel/register"));
-var jsx_runtime_1 = __importDefault(require("preact/jsx-runtime"));
 var reg = function () { return (0, register_1.default)({
-    "presets": [
-        ["@babel/preset-env", {
-                targets: {
-                    node: "current",
-                },
-            }], "preact"
-    ],
+    extensions: [".ts", ".tsx", ".js", ".jsx"],
+    presets: ["@babel/preset-env", "preact"],
 }); };
 var preact_1 = require("preact");
-// @ts-ignore
-global['react/jsx-runtime'] = jsx_runtime_1.default;
-// @ts-ignore
-global.register = reg;
-// @ts-ignore
-global.h = preact_1.h;
-// @ts-ignore
-global.Fragment = preact_1.Fragment;
+Object.defineProperty(global, 'h', preact_1.h);
+Object.defineProperty(global, 'Fragment', preact_1.Fragment);
 var fs_1 = require("fs");
 var path_1 = require("path");
 var page_1 = require("../utils/page");
@@ -91,6 +90,7 @@ var create_static_1 = require("./create-static");
 var create_server_1 = require("./create-server");
 var create_ssr_1 = require("./create-ssr");
 var esbuild_1 = require("esbuild");
+var module_from_string_1 = require("module-from-string");
 var buildReport = {};
 function generateFrameworkJSBundle() {
     console.log("🕧 Building framework bundle");
@@ -124,13 +124,17 @@ var buildComponent = function (Component, page, pageName, outdir, outWSdir) { re
         return [2 /*return*/];
     });
 }); };
-function requireFromString(src, filename) {
-    var Module = module.constructor;
-    //@ts-ignore
-    var m = new Module();
-    m._compile(src, filename);
-    return m.exports;
-}
+var tsxTransformOptions = {
+    loader: 'tsx',
+    target: 'es2015',
+    format: 'cjs',
+    jsxFactory: 'h',
+    jsxFragment: 'Fragment',
+    jsxImportSource: 'preact',
+    minify: true,
+    jsx: 'automatic'
+};
+var hCode = "import { h } from 'preact';\n";
 function buildClient() {
     return __awaiter(this, void 0, void 0, function () {
         var pages, ssrdir, outdir_1, outWSdir_1, error_1;
@@ -158,20 +162,13 @@ function buildClient() {
                                 return (0, create_server_1.generateServerScript)({ comp: page, outdir: outWSdir_1, pageName: pageName });
                             }
                             else if (page.endsWith(".tsx")) {
-                                return (0, esbuild_1.transform)((0, fs_1.readFileSync)(page).toString(), {
-                                    loader: 'tsx',
-                                    target: 'es2015',
-                                    format: 'cjs',
-                                    jsxFactory: 'h',
-                                    jsxFragment: 'Fragment',
-                                    jsxImportSource: 'preact',
-                                    minify: true,
-                                }).then(function (result) {
+                                // @ts-ignore
+                                return (0, esbuild_1.transform)((0, fs_1.readFileSync)(page).toString(), tsxTransformOptions).then(function (result) {
                                     var code = result.code;
-                                    var Component = requireFromString(code, page);
-                                    console.log(Component);
+                                    // @ts-ignore
+                                    var Component = (0, module_from_string_1.importFromStringSync)(code, __assign(__assign({}, tsxTransformOptions), { filename: page }));
                                     return buildComponent(Component, page, pageName, outdir_1, outWSdir_1);
-                                });
+                                }).catch(function (e) { return console.error(e); });
                             }
                             // @ts-ignore
                             return (_a = page, Promise.resolve().then(function () { return __importStar(require(_a)); })).then(function (Component) {

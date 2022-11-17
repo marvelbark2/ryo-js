@@ -6,7 +6,6 @@ import { render } from "preact-render-to-string";
 import { createElement } from "preact";
 import { build } from "esbuild";
 
-
 async function generateData(filePath: string, pageName: string) {
   const building = await build({
     bundle: true,
