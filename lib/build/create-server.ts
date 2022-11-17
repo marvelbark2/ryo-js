@@ -12,7 +12,7 @@ export async function generateServerScript({
         loader: { ".ts": "ts", ".js": "js" },
     }
 }: { comp: any; outdir?: string; pageName: string; bundleConstants?: any }) {
-    const isWS = comp.endsWith(".ws.js");
+    const isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
     try {
         const out = join(outdir, isWS ? "ws" : ".", `${pageName}.js`)
         const tsConfig = join(process.cwd(), "tsconfig.json");

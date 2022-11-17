@@ -6,7 +6,7 @@ export async function generateServerScript({ comp, outdir = ".ssr/output/data/",
     minify: false,
     loader: { ".ts": "ts", ".js": "js" },
 } }) {
-    const isWS = comp.endsWith(".ws.js");
+    const isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
     try {
         const out = join(outdir, isWS ? "ws" : ".", `${pageName}.js`);
         const tsConfig = join(process.cwd(), "tsconfig.json");

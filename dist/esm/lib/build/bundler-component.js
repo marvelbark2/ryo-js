@@ -1,3 +1,14 @@
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -44,7 +55,7 @@ var fetchParams = function (pageName) {
     else
         return "\n    window.fetchParams = () => {\n        const currentPage = window.location.pathname;\n        const searchParams = new URLSearchParams(window.location.search);\n        const params = {};\n        for(let [key, value] of searchParams.entries()) {\n            params[key] = value;\n        }\n        return params;\n      }";
 };
-var getHydrationScript = function (filePath, pageName) { return "\n  import {hydrate, createElement} from \"preact\"\n  import jsx from 'preact/jsx-runtime';\n  global[\"react/jsx-runtime\"] = jsx;\n  import Component from \"".concat(filePath, "\";\n  if(window.getData) {\n    hydrate(createElement(Component, {data: JSON.parse(window.getData())}), document.getElementById(\"root\"))\n\n    const ws = new WebSocket('ws://'+ window.location.host + '/").concat(pageName, "')\n  \n    ws.onopen = () => {\n      ws.onmessage = (e) => {\n          const data = JSON.parse(e.data)\n          if(data.type === 'change') {\n              hydrate(createElement(Component, {data: data.payload}), document.getElementById(\"root\"))\n          }\n      }\n    }\n  } else {\n    hydrate(createElement(Component), document.getElementById(\"root\"))\n  }\n\n  ").concat(fetchParams(pageName), "\n"); };
+var getHydrationScript = function (filePath, pageName) { return "\n  import {hydrate, createElement} from \"preact\"\n  import Component from \"".concat(filePath, "\";\n  if(window.getData) {\n    hydrate(createElement(Component, {data: JSON.parse(window.getData())}), document.getElementById(\"root\"))\n\n    const ws = new WebSocket('ws://'+ window.location.host + '/").concat(pageName, "')\n  \n    ws.onopen = () => {\n      ws.onmessage = (e) => {\n          const data = JSON.parse(e.data)\n          if(data.type === 'change') {\n              hydrate(createElement(Component, {data: data.payload}), document.getElementById(\"root\"))\n          }\n      }\n    }\n  } else {\n    hydrate(createElement(Component), document.getElementById(\"root\"))\n  }\n\n  ").concat(fetchParams(pageName), "\n"); };
 export function generateClientBundle(_a) {
     var filePath = _a.filePath, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/static/" : _b, pageName = _a.pageName, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
         bundle: true,
@@ -63,16 +74,10 @@ export function generateClientBundle(_a) {
             switch (_d.label) {
                 case 0:
                     _d.trys.push([0, 2, , 3]);
-                    return [4 /*yield*/, build({
-                            bundle: true,
-                            minify: true,
-                            treeShaking: true,
-                            write: false,
-                            entryPoints: [filePath],
-                            plugins: [compress({ gzip: true })],
-                            target: "esnext",
-                            outfile: join(".ssr/output/static", "".concat(pageName, ".bundle.js")),
-                        })];
+                    return [4 /*yield*/, build(__assign(__assign({}, bundleConstants), { bundle: true, minify: true, treeShaking: true, write: false, stdin: {
+                                contents: getHydrationScript(filePath, pageName),
+                                resolveDir: process.cwd(),
+                            }, plugins: [compress({ gzip: true })], target: "esnext", outfile: join(".ssr/output/static", "".concat(pageName, ".bundle.js")) }))];
                 case 1: return [2 /*return*/, _d.sent()];
                 case 2:
                     e_1 = _d.sent();

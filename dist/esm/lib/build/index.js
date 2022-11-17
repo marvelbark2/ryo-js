@@ -43,7 +43,6 @@ var reg = function () { return register({
                 targets: {
                     node: "current",
                 },
-                modules: "commonjs",
             }], "preact"
     ],
 }); };
@@ -56,13 +55,14 @@ global.register = reg;
 global.h = h;
 // @ts-ignore
 global.Fragment = Fragment;
-import { rmSync, existsSync } from "fs";
+import { rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getPageName, getPages } from '../utils/page';
 import { generateFramework } from "./create-framework";
 import { createStaticFile } from "./create-static";
 import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
+import { transform } from "esbuild";
 var buildReport = {};
 function generateFrameworkJSBundle() {
     console.log("🕧 Building framework bundle");
@@ -71,6 +71,38 @@ function generateFrameworkJSBundle() {
 var isEndsWith = function (collection, name) {
     return collection.some(function (item) { return name.endsWith(item); });
 };
+var buildComponent = function (Component, page, pageName, outdir, outWSdir) { return __awaiter(void 0, void 0, void 0, function () {
+    var keys;
+    return __generator(this, function (_a) {
+        if (isEndsWith([".tsx", ".jsx"], page)) {
+            keys = Object.keys(Component);
+            buildReport['/' + pageName] = keys.includes("data");
+            if (keys.includes("data") && keys.includes("server")) {
+                throw new Error("Page ".concat(pageName, " has both data and server. This is not supported."));
+            }
+            if (keys.includes("server")) {
+                buildReport['/' + pageName] = "server";
+                console.timeEnd("🕧 Building: " + pageName);
+                return [2 /*return*/, generateSSRPages({ outdir: outWSdir, pageName: pageName, path: page })];
+            }
+            console.timeEnd("🕧 Building: " + pageName);
+            return [2 /*return*/, createStaticFile(Component, page, pageName, { outdir: outdir, bundle: true, data: keys.includes("data") })];
+        }
+        else {
+            buildReport['/' + pageName] = true;
+            console.timeEnd("🕧 Building: " + pageName);
+            return [2 /*return*/, generateServerScript({ comp: page, outdir: outWSdir, pageName: pageName })];
+        }
+        return [2 /*return*/];
+    });
+}); };
+function requireFromString(src, filename) {
+    var Module = module.constructor;
+    //@ts-ignore
+    var m = new Module();
+    m._compile(src, filename);
+    return m.exports;
+}
 function buildClient() {
     return __awaiter(this, void 0, void 0, function () {
         var pages, ssrdir, outdir_1, outWSdir_1, error_1;
@@ -84,40 +116,37 @@ function buildClient() {
                         rmSync(ssrdir, { recursive: true });
                     outdir_1 = join(ssrdir, "output/static");
                     outWSdir_1 = join(ssrdir, "output/server");
+                    reg();
                     // clear outdir
                     return [4 /*yield*/, Promise.allSettled(pages
                             .filter(function (page) { return isEndsWith([".js", ".jsx", ".ts", ".tsx"], page); })
                             .map(function (page) {
-                            var isNotTS = isEndsWith([".js", ".jsx"], page);
                             var pageName = getPageName(page);
                             console.time("🕧 Building: " + pageName);
-                            if (!isNotTS) {
+                            if (page.endsWith(".ts")) {
                                 buildReport['/' + pageName] = true;
                                 console.timeEnd("🕧 Building: " + pageName);
                                 return generateServerScript({ comp: page, outdir: outWSdir_1, pageName: pageName });
                             }
+                            else if (page.endsWith(".tsx")) {
+                                return transform(readFileSync(page).toString(), {
+                                    loader: 'tsx',
+                                    target: 'es2015',
+                                    format: 'cjs',
+                                    jsxFactory: 'h',
+                                    jsxFragment: 'Fragment',
+                                    jsxImportSource: 'preact',
+                                    minify: true,
+                                }).then(function (result) {
+                                    var code = result.code;
+                                    var Component = requireFromString(code, page);
+                                    console.log(Component);
+                                    return buildComponent(Component, page, pageName, outdir_1, outWSdir_1);
+                                });
+                            }
                             // @ts-ignore
-                            return Promise.resolve(require(page)).then(function (Component) {
-                                reg();
-                                if (page.endsWith(".jsx")) {
-                                    var keys = Object.keys(Component);
-                                    buildReport['/' + pageName] = keys.includes("data");
-                                    if (keys.includes("data") && keys.includes("server")) {
-                                        throw new Error("Page ".concat(pageName, " has both data and server. This is not supported."));
-                                    }
-                                    if (keys.includes("server")) {
-                                        buildReport['/' + pageName] = "server";
-                                        console.timeEnd("🕧 Building: " + pageName);
-                                        return generateSSRPages({ outdir: outWSdir_1, pageName: pageName, path: page });
-                                    }
-                                    console.timeEnd("🕧 Building: " + pageName);
-                                    return createStaticFile(Component, page, pageName, { outdir: outdir_1, bundle: true, data: keys.includes("data") });
-                                }
-                                else {
-                                    buildReport['/' + pageName] = true;
-                                    console.timeEnd("🕧 Building: " + pageName);
-                                    return generateServerScript({ comp: page, outdir: outWSdir_1, pageName: pageName });
-                                }
+                            return import(page).then(function (Component) {
+                                return buildComponent(Component, page, pageName, outdir_1, outWSdir_1);
                             }).catch(function (err) { return console.error(err); });
                         }))];
                 case 1:

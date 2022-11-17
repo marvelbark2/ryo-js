@@ -59,7 +59,7 @@ export function generateServerScript(_a) {
         return __generator(this, function (_d) {
             switch (_d.label) {
                 case 0:
-                    isWS = comp.endsWith(".ws.js");
+                    isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
                     _d.label = 1;
                 case 1:
                     _d.trys.push([1, 3, , 4]);

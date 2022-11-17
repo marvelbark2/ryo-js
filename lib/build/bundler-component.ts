@@ -32,8 +32,6 @@ const fetchParams = (pageName: string) => {
 }
 const getHydrationScript = (filePath: string, pageName: string) => `
   import {hydrate, createElement} from "preact"
-  import jsx from 'preact/jsx-runtime';
-  global["react/jsx-runtime"] = jsx;
   import Component from "${filePath}";
   if(window.getData) {
     hydrate(createElement(Component, {data: JSON.parse(window.getData())}), document.getElementById("root"))

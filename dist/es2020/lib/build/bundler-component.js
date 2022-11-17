@@ -33,8 +33,6 @@ const fetchParams = (pageName) => {
 };
 const getHydrationScript = (filePath, pageName) => `
   import {hydrate, createElement} from "preact"
-  import jsx from 'preact/jsx-runtime';
-  global["react/jsx-runtime"] = jsx;
   import Component from "${filePath}";
   if(window.getData) {
     hydrate(createElement(Component, {data: JSON.parse(window.getData())}), document.getElementById("root"))
@@ -68,11 +66,15 @@ export async function generateClientBundle({ filePath, outdir = ".ssr/output/sta
 } }) {
     try {
         return await build({
+            ...bundleConstants,
             bundle: true,
             minify: true,
             treeShaking: true,
             write: false,
-            entryPoints: [filePath],
+            stdin: {
+                contents: getHydrationScript(filePath, pageName),
+                resolveDir: process.cwd(),
+            },
             plugins: [compress({ gzip: true })],
             target: "esnext",
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
