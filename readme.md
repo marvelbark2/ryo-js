@@ -10,12 +10,12 @@ Small js fullstack framework blazly fast
 ```
 
 ## Features:
-    - Routing based filesystem
-    - Blazly fast 
-    - Everything on src folder
-    - Create apis, websockets, server files and preact components
-    - SPA routing which makes the site so fast (Using Flamethrower)
-    - Partially support typescript (Example: https://github.com/marvelbark2/ryo-js-examples/blob/main/ryo-api/src/me.ts)
+- Routing based filesystem
+- Blazly fast 
+- Everything on src folder
+- Create apis, websockets, server files and preact components
+- SPA routing which makes the site so fast (Using Flamethrower)
+- Partially support typescript (Example: https://github.com/marvelbark2/ryo-js-examples/blob/main/ryo-api/src/me.ts)
 
 ## what you can do with Ryo js:
 
