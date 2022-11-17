@@ -2,6 +2,13 @@
 
 Small js fullstack framework blazly fast
 
+## Installation
+
+```sh
+    npm i ryo.js
+    npm i @babel/preset-env babel-preset-preact -D
+```
+
 ## Features:
     - Routing based filesystem
     - Blazly fast 
@@ -268,6 +275,9 @@ export default function index({ ...props }) {
 ```bash
 npm run build && npm run start
 ```
+
+### More examples:
+https://github.com/marvelbark2/ryo-js-examples
 
 ## Library Using:
 
