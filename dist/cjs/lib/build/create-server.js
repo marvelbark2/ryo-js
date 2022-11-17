@@ -50,6 +50,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateServerScript = void 0;
 var path_1 = require("path");
 var esbuild_1 = require("esbuild");
+var fs_1 = require("fs");
 function generateServerScript(_a) {
     var comp = _a.comp, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/data/" : _b, pageName = _a.pageName, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
         treeShaking: false,
@@ -57,7 +58,7 @@ function generateServerScript(_a) {
         loader: { ".ts": "ts", ".js": "js" },
     } : _c;
     return __awaiter(this, void 0, void 0, function () {
-        var isWS, out, e_1;
+        var isWS, out, tsConfig, e_1;
         return __generator(this, function (_d) {
             switch (_d.label) {
                 case 0:
@@ -66,7 +67,8 @@ function generateServerScript(_a) {
                 case 1:
                     _d.trys.push([1, 3, , 4]);
                     out = (0, path_1.join)(outdir, isWS ? "ws" : ".", "".concat(pageName, ".js"));
-                    return [4 /*yield*/, (0, esbuild_1.build)(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", outfile: out, allowOverwrite: false }))];
+                    tsConfig = (0, path_1.join)(process.cwd(), "tsconfig.json");
+                    return [4 /*yield*/, (0, esbuild_1.build)(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", outfile: out, tsconfig: (0, fs_1.existsSync)(tsConfig) ? tsConfig : undefined, allowOverwrite: false }))];
                 case 2: return [2 /*return*/, _d.sent()];
                 case 3:
                     e_1 = _d.sent();

@@ -1,5 +1,6 @@
 import { join } from "path";
 import { build } from "esbuild";
+import { existsSync } from "fs";
 
 export async function generateServerScript({
     comp,
@@ -14,6 +15,7 @@ export async function generateServerScript({
     const isWS = comp.endsWith(".ws.js");
     try {
         const out = join(outdir, isWS ? "ws" : ".", `${pageName}.js`)
+        const tsConfig = join(process.cwd(), "tsconfig.json");
         return await build({
             ...bundleConstants,
             entryPoints: [comp],
@@ -21,6 +23,7 @@ export async function generateServerScript({
             target: "node14",
             format: "esm",
             outfile: out,
+            tsconfig: existsSync(tsConfig) ? tsConfig : undefined,
             allowOverwrite: false
         });
     } catch (e) {
