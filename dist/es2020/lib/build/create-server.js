@@ -1,25 +1,24 @@
 import { join } from "path";
 import { build } from "esbuild";
-import { readFileSync } from "fs";
 export async function generateServerScript({ comp, outdir = ".ssr/output/data/", pageName, bundleConstants = {
-    allowOverwrite: true,
-    treeShaking: true,
-    minify: true,
+    treeShaking: false,
+    minify: false,
     loader: { ".ts": "ts", ".js": "js" },
 } }) {
     const isWS = comp.endsWith(".ws.js");
     try {
         const out = join(outdir, isWS ? "ws" : ".", `${pageName}.js`);
-        return await build({
+        const result = await build({
             ...bundleConstants,
-            stdin: {
-                contents: readFileSync(comp).toString("utf-8"),
-                resolveDir: join("."),
-            },
-            bundle: false,
+            entryPoints: [comp],
+            bundle: true,
             target: "node14",
+            format: "esm",
             outfile: out,
+            allowOverwrite: false
         });
+        console.log({ result });
+        return result;
     }
     catch (e) {
         console.error(e);

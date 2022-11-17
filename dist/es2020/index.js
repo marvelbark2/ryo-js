@@ -16,7 +16,7 @@ const args = process.argv.slice(2);
     if (args.includes("build")) {
         const buildReport = await build();
         const data = JSON.stringify(buildReport, null, 2);
-        console.log("🕧 Building pages report from " + data);
+        console.log("🕧 Building pages report");
         const jsonReportPath = join(process.cwd(), ".ssr/build-report.json");
         writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
     }

@@ -64,7 +64,6 @@ export function generateClientBundle(_a) {
                 case 0:
                     _d.trys.push([0, 2, , 3]);
                     resolved = __dirname.split("preact-ssr")[0] + "preact-ssr";
-                    console.log({ resolved: resolved });
                     return [4 /*yield*/, build({
                             bundle: true,
                             minify: true,

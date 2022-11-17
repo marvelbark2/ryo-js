@@ -1,27 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -68,16 +45,11 @@ var jsx_runtime_1 = __importDefault(require("preact/jsx-runtime"));
 var reg = function () { return (0, register_1.default)({
     "presets": [
         ["@babel/preset-env", {
-                "targets": {
-                    "node": "current"
-                }
-            }]
-    ],
-    "plugins": [
-        ["@babel/plugin-transform-react-jsx", {
-                "pragma": "h",
-                "pragmaFrag": "Fragment",
-            }]
+                targets: {
+                    node: "current",
+                },
+                modules: "commonjs",
+            }], "preact"
     ],
 }); };
 var preact_1 = require("preact");
@@ -101,6 +73,9 @@ function generateFrameworkJSBundle() {
     console.log("🕧 Building framework bundle");
     (0, create_framework_1.generateFramework)();
 }
+var isEndsWith = function (collection, name) {
+    return collection.some(function (item) { return name.endsWith(item); });
+};
 function buildClient() {
     return __awaiter(this, void 0, void 0, function () {
         var pages, ssrdir, outdir_1, outWSdir_1, error_1;
@@ -116,19 +91,20 @@ function buildClient() {
                     outWSdir_1 = (0, path_1.join)(ssrdir, "output/server");
                     // clear outdir
                     return [4 /*yield*/, Promise.allSettled(pages
-                            .filter(function (page) { return page.endsWith(".jsx") || page.endsWith(".js"); })
+                            .filter(function (page) { return isEndsWith([".js", ".jsx", ".ts", ".tsx"], page); })
                             .map(function (page) {
-                            var _a;
-                            reg();
+                            var isNotTS = isEndsWith([".js", ".jsx"], page);
                             var pageName = (0, page_1.getPageName)(page);
-                            console.log({
-                                page: page
-                            });
+                            console.time("🕧 Building: " + pageName);
+                            if (!isNotTS) {
+                                buildReport['/' + pageName] = true;
+                                console.timeEnd("🕧 Building: " + pageName);
+                                return (0, create_server_1.generateServerScript)({ comp: page, outdir: outWSdir_1, pageName: pageName });
+                            }
                             // @ts-ignore
-                            return (_a = page, Promise.resolve().then(function () { return __importStar(require(_a)); })).then(function (Component) {
-                                console.time("🕧 Building: " + pageName);
+                            return Promise.resolve(require(page)).then(function (Component) {
+                                reg();
                                 if (page.endsWith(".jsx")) {
-                                    console.log(Component.default.toString());
                                     var keys = Object.keys(Component);
                                     buildReport['/' + pageName] = keys.includes("data");
                                     if (keys.includes("data") && keys.includes("server")) {
@@ -137,7 +113,6 @@ function buildClient() {
                                     if (keys.includes("server")) {
                                         buildReport['/' + pageName] = "server";
                                         console.timeEnd("🕧 Building: " + pageName);
-                                        console.log("SSR PAGE: ", page);
                                         return (0, create_ssr_1.generateSSRPages)({ outdir: outWSdir_1, pageName: pageName, path: page });
                                     }
                                     console.timeEnd("🕧 Building: " + pageName);
@@ -145,14 +120,8 @@ function buildClient() {
                                     return (0, create_static_1.createStaticFile)(Component, page, pageName, { outdir: outdir_1, bundle: true, data: keys.includes("data") });
                                 }
                                 else {
-                                    /**
-                                     * comp,
-                                     * outdir = ".ssr/output/data/",
-                                     * pageName,
-                     */
                                     buildReport['/' + pageName] = true;
                                     console.timeEnd("🕧 Building: " + pageName);
-                                    console.log("Server PAGE: ", page);
                                     return (0, create_server_1.generateServerScript)({ comp: page, outdir: outWSdir_1, pageName: pageName });
                                 }
                             }).catch(function (err) { return console.error(err); });

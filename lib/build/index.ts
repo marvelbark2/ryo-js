@@ -7,17 +7,13 @@ import jsx from "preact/jsx-runtime";
 const reg = () => register({
     "presets": [
         ["@babel/preset-env", {
-            "targets": {
-                "node": "current"
-            }
-        }]
+            targets: {
+                node: "current",
+            },
+            modules: "commonjs",
+        }], "preact"
     ],
-    "plugins": [
-        ["@babel/plugin-transform-react-jsx", {
-            "pragma": "h",
-            "pragmaFrag": "Fragment",
-        }]
-    ],
+
 })
 import { h, Fragment } from "preact";
 
@@ -32,7 +28,7 @@ global.h = h;
 // @ts-ignore
 global.Fragment = Fragment;
 
-import { writeFile, rmSync, existsSync, appendFile } from "fs";
+import { rmSync, existsSync } from "fs";
 import { join } from "path";
 
 
@@ -43,7 +39,6 @@ import { generateFramework } from "./create-framework";
 import { createStaticFile } from "./create-static";
 import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
-import { spawn } from "child_process";
 
 const buildReport: any = {};
 
@@ -53,6 +48,9 @@ function generateFrameworkJSBundle() {
     generateFramework();
 }
 
+const isEndsWith = (collection: string[], name: string) => {
+    return collection.some((item) => name.endsWith(item));
+}
 
 
 async function buildClient() {
@@ -66,22 +64,25 @@ async function buildClient() {
         const outdir = join(ssrdir, "output/static");
         const outWSdir = join(ssrdir, "output/server");
 
-
         // clear outdir
         await Promise.allSettled(
             pages
-                .filter((page) => page.endsWith(".jsx") || page.endsWith(".js"))
+                .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx"], page))
                 .map((page) => {
-                    reg();
+                    const isNotTS = isEndsWith([".js", ".jsx"], page);
                     const pageName = getPageName(page);
-                    console.log({
-                        page
-                    });
+
+                    console.time("🕧 Building: " + pageName);
+
+                    if (!isNotTS) {
+                        buildReport['/' + pageName] = true;
+                        console.timeEnd("🕧 Building: " + pageName);
+                        return generateServerScript({ comp: page, outdir: outWSdir, pageName });
+                    }
                     // @ts-ignore
-                    return import(page).then((Component) => {
-                        console.time("🕧 Building: " + pageName);
+                    return Promise.resolve(require(page)).then((Component) => {
+                        reg();
                         if (page.endsWith(".jsx")) {
-                            console.log(Component.default.toString());
                             const keys = Object.keys(Component)
                             buildReport['/' + pageName] = keys.includes("data");
                             if (keys.includes("data") && keys.includes("server")) {
@@ -90,21 +91,14 @@ async function buildClient() {
                             if (keys.includes("server")) {
                                 buildReport['/' + pageName] = "server";
                                 console.timeEnd("🕧 Building: " + pageName);
-                                console.log("SSR PAGE: ", page);
                                 return generateSSRPages({ outdir: outWSdir, pageName, path: page });
                             }
                             console.timeEnd("🕧 Building: " + pageName);
                             console.log("Static PAGE: ", page);
                             return createStaticFile(Component, page, pageName, { outdir, bundle: true, data: keys.includes("data") });
                         } else {
-                            /**
-                             * comp,
-                             * outdir = ".ssr/output/data/",
-                             * pageName,
-             */
                             buildReport['/' + pageName] = true;
                             console.timeEnd("🕧 Building: " + pageName);
-                            console.log("Server PAGE: ", page);
                             return generateServerScript({ comp: page, outdir: outWSdir, pageName });
                         }
                     }).catch((err) => console.error(err));

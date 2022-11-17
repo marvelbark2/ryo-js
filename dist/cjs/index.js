@@ -63,7 +63,7 @@ var args = process.argv.slice(2);
             case 1:
                 buildReport = _a.sent();
                 data = JSON.stringify(buildReport, null, 2);
-                console.log("🕧 Building pages report from " + data);
+                console.log("🕧 Building pages report");
                 jsonReportPath = (0, path_1.join)(process.cwd(), ".ssr/build-report.json");
                 (0, fs_1.writeFileSync)(jsonReportPath, Buffer.from(data), { flag: "wx" });
                 return [3 /*break*/, 3];
