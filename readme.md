@@ -1,7 +1,7 @@
 # Ryo js
 
 Small js fullstack framework blazly fast
-
+**Memo version**
 ## Installation
 
 ```sh
@@ -15,7 +15,7 @@ npm i @luncheon/esbuild-plugin-gzip babel-preset-preact -D
 - Everything on src folder
 - Create apis, websockets, server files and preact components
 - SPA routing which makes the site so fast (Using Flamethrower)
-- Typescript full supported without configuration needed (Example: https://github.com/marvelbark2/ryo-js-examples/blob/main/ryo-api/src/me.ts)
+- Typescript (No types generated at least for now) supported without configuration needed (Example: https://github.com/marvelbark2/ryo-js-examples/blob/main/ryo-api/src/me.ts)
 
 ## what you can do with Ryo js:
 
@@ -36,14 +36,16 @@ npm i @luncheon/esbuild-plugin-gzip babel-preset-preact -D
         - stream: Created stream, like readStream
         - length: Stream length (without reading it)
         
-* Websockets: naming the with ".ws.js" suffix:
+* Websockets: naming the file in src folder with ".ws.js" suffix:
     - Return object match uWebSockets.js documentation
+* Event streams: naming the file in src folder with ".ev.js" suffix:
+    - Export default: object with invalidate field (ms) and runner function (Async with params route if needed)
 
 ## Example: (All demos on src folder)
 
 ### websockets:
 ```js
-// Path: msg.ws.js
+// Path: src/msg.ws.js
 export default {
     open: (ws, req) => {
         console.log("NEW CLIENT on /msg");
@@ -61,7 +63,7 @@ export default {
 #### JSON API:
 
 ```js
-// Path: api.js
+// Path: src/api.js
 
 export function get({ url }) {
     return {
@@ -80,7 +82,7 @@ export function post({ body }) {
 
 #### Streamable API:
 ```js
-// Path: file.js
+// Path: src/file.js
 
 import fs from 'fs';
 import { join } from 'path';
@@ -104,7 +106,7 @@ export function get({ url }) {
 
 At least for now, ** You can't import other components ** 
 ```js
-//Path: server.jsx
+//Path: src/server.jsx
 
 import { PrismaClient } from "@prisma/client";
 
@@ -142,7 +144,8 @@ export default async function SSRPage() {
 ```
 #### Static sync component:
 ```js
-// Path: index.jsx
+// Path: src/index.jsx
+// route: /
 
 import { useEffect, useState } from "react";
 
@@ -179,7 +182,8 @@ export default function index({ data }) {
 #### Static async/fresh component:
 
 ```js
-// Path: counter.jsx
+// Path: src/counter.jsx
+// route: /counter
 
 let count = 0;
 export const data = {
@@ -207,7 +211,8 @@ export default function index({ data }) {
 ```
 
 ```js
-//path: data.jsx
+//path: src/data.jsx
+//route: /data
 
 // Other example & router
 
@@ -253,10 +258,11 @@ export default function index({ data }) {
 ### Dynamic route (component):
 
 ```js
-//path: blog/:id.jsx
+//path: src/blog/:id.jsx
+//route: /blog/ID
 
 import { useEffect } from "react";
-import Router from "../../lib/router/router"
+import Router from "ryo.js/router"
 
 export default function index({ ...props }) {
     const router = Router();
@@ -270,6 +276,24 @@ export default function index({ ...props }) {
     )
 }
 ```
+
+
+```js
+//path: src/events/:id.ev.js
+//route: /events/ID.ev
+
+export default {
+    invalidate: 1000,
+    runner: async ({ params }) => {
+        console.log(params)
+        return { message: "I'm the user: " + params.id };
+    }
+}
+
+
+```
+
+### 
 
 ### Build & serve
 
