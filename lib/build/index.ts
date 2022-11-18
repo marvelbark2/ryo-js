@@ -13,7 +13,7 @@ import { h, Fragment } from "preact";
 Object.defineProperty(global, 'h', h);
 Object.defineProperty(global, 'Fragment', Fragment);
 
-import { rmSync, existsSync, readFileSync } from "fs";
+import { rmSync, existsSync, readFileSync, createReadStream, createWriteStream } from "fs";
 import { join } from "path";
 
 
@@ -71,7 +71,6 @@ const tsxTransformOptions = {
     minify: true,
     jsx: 'automatic'
 }
-const hCode = "import { h } from 'preact';\n"
 async function buildClient() {
     try {
         const pages = getPages(join(process.cwd(), "src"), join);
@@ -123,8 +122,22 @@ async function buildClient() {
     }
 }
 
+function copyPublicFiles() {
+    const publicDir = join(process.cwd(), "public");
+    const outdir = join(".ssr", "output/static");
+    if (existsSync(publicDir)) {
+        const files = getPages(publicDir, join);
+        files.forEach((file) => {
+            const fileName = file.split(publicDir)[1];
+            createReadStream(file).pipe(createWriteStream(join(outdir, fileName)));
+        })
+
+    }
+}
+
 
 export default async function build() {
     await buildClient();
+    copyPublicFiles();
     return buildReport;
 }
