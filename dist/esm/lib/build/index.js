@@ -54,7 +54,7 @@ var reg = function () { return register({
 import { h, Fragment } from "preact";
 Object.defineProperty(global, 'h', h);
 Object.defineProperty(global, 'Fragment', Fragment);
-import { rmSync, existsSync, readFileSync } from "fs";
+import { rmSync, existsSync, readFileSync, createReadStream, createWriteStream } from "fs";
 import { join } from "path";
 import { getPageName, getPages } from '../utils/page';
 import { generateFramework } from "./create-framework";
@@ -74,8 +74,8 @@ var isEndsWith = function (collection, name) {
 var buildComponent = function (Component, page, pageName, outdir, outWSdir) { return __awaiter(void 0, void 0, void 0, function () {
     var keys;
     return __generator(this, function (_a) {
+        keys = Object.keys(Component);
         if (isEndsWith([".tsx", ".jsx"], page)) {
-            keys = Object.keys(Component);
             buildReport['/' + pageName] = keys.includes("data");
             if (keys.includes("data") && keys.includes("server")) {
                 throw new Error("Page ".concat(pageName, " has both data and server. This is not supported."));
@@ -89,7 +89,12 @@ var buildComponent = function (Component, page, pageName, outdir, outWSdir) { re
             return [2 /*return*/, createStaticFile(Component, page, pageName, { outdir: outdir, bundle: true, data: keys.includes("data") })];
         }
         else {
-            buildReport['/' + pageName] = true;
+            if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
+                buildReport['/' + pageName] = "api";
+            }
+            else {
+                buildReport['/' + pageName] = true;
+            }
             console.timeEnd("🕧 Building: " + pageName);
             return [2 /*return*/, generateServerScript({ comp: page, outdir: outWSdir, pageName: pageName })];
         }
@@ -106,7 +111,6 @@ var tsxTransformOptions = {
     minify: true,
     jsx: 'automatic'
 };
-var hCode = "import { h } from 'preact';\n";
 function buildClient() {
     return __awaiter(this, void 0, void 0, function () {
         var pages, ssrdir, outdir_1, outWSdir_1, error_1;
@@ -160,6 +164,17 @@ function buildClient() {
         });
     });
 }
+function copyPublicFiles() {
+    var publicDir = join(process.cwd(), "public");
+    var outdir = join(".ssr", "output/static");
+    if (existsSync(publicDir)) {
+        var files = getPages(publicDir, join);
+        files.forEach(function (file) {
+            var fileName = file.split(publicDir)[1];
+            createReadStream(file).pipe(createWriteStream(join(outdir, fileName)));
+        });
+    }
+}
 export default function build() {
     return __awaiter(this, void 0, void 0, function () {
         return __generator(this, function (_a) {
@@ -167,6 +182,7 @@ export default function build() {
                 case 0: return [4 /*yield*/, buildClient()];
                 case 1:
                     _a.sent();
+                    copyPublicFiles();
                     return [2 /*return*/, buildReport];
             }
         });

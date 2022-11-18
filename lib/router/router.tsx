@@ -1,3 +1,5 @@
+//@ts-ignore
+
 import { useState, useEffect } from 'react';
 
 export default function Router() {
@@ -5,19 +7,25 @@ export default function Router() {
       path: undefined,
       params: {},
       isLoading: true,
-      push: (path) => { }
+      push: (path: string) => { }
    });
    useEffect(() => {
       if (document) {
+         //@ts-ignore
          const params = window.fetchParams();
-         setState((p) => ({
+
+         setState((p: any) => ({
             ...p, params, isLoading: false,
-            push: (path) => {
+            push: (path: string) => {
+               //@ts-ignore
                window.framework.ROUTER.go(path)
+               //@ts-ignore
                setState((p) => ({ ...p, path, params: window.fetchParams() }));
             },
             back: () => {
+               //@ts-ignore
                window.framework.ROUTER.back()
+               //@ts-ignore
                setState((p) => ({ ...p, path: window.location.pathname, params: window.fetchParams() }));
             }
          }));

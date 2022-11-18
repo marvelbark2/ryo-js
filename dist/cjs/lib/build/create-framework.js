@@ -11,13 +11,11 @@ function getScript() {
     var out = (0, path_1.join)(process.cwd(), ".ssr/output/static", "framework-system.js");
     (0, esbuild_1.build)({
         bundle: true,
-        inject: [(0, path_1.join)(__dirname, "preact-shim-client.js")],
         entryPoints: [(0, path_1.join)(__dirname, "preact-tools.js")],
         outfile: out,
         splitting: false,
         jsxFactory: 'h',
         jsxFragment: 'Fragment',
-        //inject: [join(process.cwd(), "lib/build/preact-shim.js")],
         plugins: [(0, esbuild_plugin_gzip_1.default)({ gzip: true })],
         write: false,
         target: "esnext",

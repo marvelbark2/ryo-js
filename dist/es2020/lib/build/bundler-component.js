@@ -58,7 +58,7 @@ export async function generateClientBundle({ filePath, outdir = ".ssr/output/sta
     allowOverwrite: true,
     treeShaking: true,
     minify: true,
-    //inject: [`lib/build/preact-shim.js`],
+    inject: [join(__dirname, `preact-shim.js`)],
     loader: { ".ts": "ts", ".tsx": "tsx", ".js": "jsx", ".jsx": "jsx" },
     jsx: "automatic",
     legalComments: "none",

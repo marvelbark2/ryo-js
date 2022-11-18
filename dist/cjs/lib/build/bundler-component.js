@@ -68,7 +68,7 @@ function generateClientBundle(_a) {
         allowOverwrite: true,
         treeShaking: true,
         minify: true,
-        //inject: [`lib/build/preact-shim.js`],
+        inject: [(0, path_1.join)(__dirname, "preact-shim.js")],
         loader: { ".ts": "ts", ".tsx": "tsx", ".js": "jsx", ".jsx": "jsx" },
         jsx: "automatic",
         legalComments: "none",

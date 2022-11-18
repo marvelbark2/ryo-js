@@ -15,7 +15,7 @@ npm i @luncheon/esbuild-plugin-gzip babel-preset-preact -D
 - Everything on src folder
 - Create apis, websockets, server files and preact components
 - SPA routing which makes the site so fast (Using Flamethrower)
-- Partially support typescript (Example: https://github.com/marvelbark2/ryo-js-examples/blob/main/ryo-api/src/me.ts)
+- Typescript full supported without configuration needed (Example: https://github.com/marvelbark2/ryo-js-examples/blob/main/ryo-api/src/me.ts)
 
 ## what you can do with Ryo js:
 

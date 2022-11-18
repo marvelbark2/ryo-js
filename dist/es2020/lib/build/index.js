@@ -7,7 +7,7 @@ const reg = () => register({
 import { h, Fragment } from "preact";
 Object.defineProperty(global, 'h', h);
 Object.defineProperty(global, 'Fragment', Fragment);
-import { rmSync, existsSync, readFileSync } from "fs";
+import { rmSync, existsSync, readFileSync, createReadStream, createWriteStream } from "fs";
 import { join } from "path";
 import { getPageName, getPages } from '../utils/page';
 import { generateFramework } from "./create-framework";
@@ -25,8 +25,8 @@ const isEndsWith = (collection, name) => {
     return collection.some((item) => name.endsWith(item));
 };
 const buildComponent = async (Component, page, pageName, outdir, outWSdir) => {
+    const keys = Object.keys(Component);
     if (isEndsWith([".tsx", ".jsx"], page)) {
-        const keys = Object.keys(Component);
         buildReport['/' + pageName] = keys.includes("data");
         if (keys.includes("data") && keys.includes("server")) {
             throw new Error(`Page ${pageName} has both data and server. This is not supported.`);
@@ -40,7 +40,12 @@ const buildComponent = async (Component, page, pageName, outdir, outWSdir) => {
         return createStaticFile(Component, page, pageName, { outdir, bundle: true, data: keys.includes("data") });
     }
     else {
-        buildReport['/' + pageName] = true;
+        if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
+            buildReport['/' + pageName] = "api";
+        }
+        else {
+            buildReport['/' + pageName] = true;
+        }
         console.timeEnd("🕧 Building: " + pageName);
         return generateServerScript({ comp: page, outdir: outWSdir, pageName });
     }
@@ -55,7 +60,6 @@ const tsxTransformOptions = {
     minify: true,
     jsx: 'automatic'
 };
-const hCode = "import { h } from 'preact';\n";
 async function buildClient() {
     try {
         const pages = getPages(join(process.cwd(), "src"), join);
@@ -99,7 +103,19 @@ async function buildClient() {
         console.error(error);
     }
 }
+function copyPublicFiles() {
+    const publicDir = join(process.cwd(), "public");
+    const outdir = join(".ssr", "output/static");
+    if (existsSync(publicDir)) {
+        const files = getPages(publicDir, join);
+        files.forEach((file) => {
+            const fileName = file.split(publicDir)[1];
+            createReadStream(file).pipe(createWriteStream(join(outdir, fileName)));
+        });
+    }
+}
 export default async function build() {
     await buildClient();
+    copyPublicFiles();
     return buildReport;
 }

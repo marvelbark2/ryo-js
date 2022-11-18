@@ -113,6 +113,8 @@ export default function server() {
         res.end("404 Not Found");
     }
 
+    const isStatic = new Map();
+
     const cachedData = new Map();
     const cachedChange: string[] = [];
     const cachedDataPages = new Map();
@@ -267,15 +269,25 @@ export default function server() {
             return acc;
         }, new Map());
     }
-
+    const cacheAPIMethods = new Map();
+    const getAPIMethod = (pageName: string, methodName: string) => {
+        const key = `${pageName}.${methodName}`;
+        if (cacheAPIMethods.has(key)) {
+            return cacheAPIMethods.get(key);
+        } else {
+            const api = getModuleFromPage(pageName);
+            const result = api[methodName];
+            cacheAPIMethods.set(key, result);
+            return result;
+        }
+    }
     async function renderAPI(res: uws.HttpResponse, req: uws.HttpRequest, pageName: string) {
         try {
             const method = req.getMethod();
-            const module = getModuleFromPage(pageName);
 
-            if (method.includes(method)) {
+            {
                 let body = {};
-                const api = module[method];
+                const api = getAPIMethod(pageName, method);
                 if (method !== "get") {
                     body = await new Promise((resolve, reject) => {
                         readJson(res, (obj: Buffer | string) => {
@@ -287,7 +299,7 @@ export default function server() {
                     })
                 }
 
-                const params = getParams(req, pageName)
+                const params = pageName.includes(":") ? getParams(req, pageName) : undefined;
 
                 const dataCall = api({
                     url: pageName,
@@ -307,9 +319,6 @@ export default function server() {
                     res.writeHeader("Content-Type", "application/json");
                     res.end(JSON.stringify(data));
                 }
-            } else {
-                render404(res);
-                console.log("Method not allowed");
             }
 
         } catch (e) {
@@ -397,9 +406,9 @@ export default function server() {
                     if (newPageName && path.includes("/:")) {
                         return render(res, req, newPageName, params);
                     }
-                    const filePath = join(process.cwd(), ".ssr", "output", "static", `${pageName}.html`);
-                    const fileExists = existsSync(filePath);
+                    const fileExists = isStatic.get(pageName)
                     if (fileExists) {
+                        const filePath = join(process.cwd(), ".ssr", "output", "static", `${pageName}.html`);
                         const stream = createReadStream(filePath);
                         const size = stream.bytesRead;
                         return pipeStreamOverResponse(res, stream, size);
@@ -528,23 +537,51 @@ export default function server() {
             return 0;
         })
         .forEach((pageServerName) => {
-
+            const filePath = join(process.cwd(), ".ssr", "output", "static", `${pageServerName}.html`)
             const pageName = pageServerName.replace("/index", "/");
 
-            app.any(pageName, async (res, req) => {
-                const path = req.getUrl();
-                const exts = path.split(".");
-                if (exts.length > 1) {
-                    return renderStatic(res, exts, path);
-                } else {
-                    const isServer = buildReport[pageServerName] === 'server';
-                    if (isServer) {
-                        return await renderServer(res, pageServerName);
-                    }
+            const isPage = existsSync(filePath);
+            const isServer = buildReport[pageServerName] === 'server';
+            const isApi = buildReport[pageServerName] === 'api';
 
-                    return render(res, req, pageServerName);
-                }
-            })
+            isStatic.set(pageServerName, isPage);
+
+            if (isServer) {
+                app.any(pageName, async (res) => {
+                    return await renderServer(res, pageServerName);
+                })
+            } else if (isApi || !isPage) {
+                app.any(pageName, (res, req) => {
+                    const path = req.getUrl();
+                    if (path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".map") || path.endsWith(".html")) {
+                        return render(res, req);
+                    } else {
+                        return renderAPI(res, req, pageServerName);
+                    }
+                })
+            } else if (isPage) {
+                app.get(pageName, (res, req) => {
+                    const path = req.getUrl();
+                    if (path.endsWith(".bundle.js") || path.endsWith(".data.css")) {
+                        return render(res, req);
+                    } else {
+                        const stream = createReadStream(filePath);
+                        const size = stream.bytesRead;
+                        return pipeStreamOverResponse(res, stream, size);
+                    }
+                })
+            } else {
+                app.any(pageName, async (res, req) => {
+                    const path = req.getUrl();
+                    const exts = path.split(".");
+                    if (exts.length > 1) {
+                        return renderStatic(res, exts, path);
+                    } else {
+                        return render(res, req, pageServerName);
+                    }
+                })
+            }
+
 
             app.get(`${pageServerName}.bundle.js`, (res, req) => {
                 const path = req.getUrl();

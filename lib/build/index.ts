@@ -41,8 +41,8 @@ const isEndsWith = (collection: string[], name: string) => {
 
 
 const buildComponent = async (Component: any, page: string, pageName: string, outdir: string, outWSdir: string) => {
+    const keys = Object.keys(Component)
     if (isEndsWith([".tsx", ".jsx"], page)) {
-        const keys = Object.keys(Component)
         buildReport['/' + pageName] = keys.includes("data");
         if (keys.includes("data") && keys.includes("server")) {
             throw new Error(`Page ${pageName} has both data and server. This is not supported.`);
@@ -55,7 +55,11 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
         console.timeEnd("🕧 Building: " + pageName);
         return createStaticFile(Component, page, pageName, { outdir, bundle: true, data: keys.includes("data") });
     } else {
-        buildReport['/' + pageName] = true;
+        if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
+            buildReport['/' + pageName] = "api";
+        } else {
+            buildReport['/' + pageName] = true;
+        }
         console.timeEnd("🕧 Building: " + pageName);
         return generateServerScript({ comp: page, outdir: outWSdir, pageName });
     }
@@ -86,7 +90,7 @@ async function buildClient() {
         await Promise.allSettled(
             pages
                 .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx"], page))
-                .map((page) => {
+                .map((page: string) => {
                     const pageName = getPageName(page);
                     console.time("🕧 Building: " + pageName);
                     if (page.endsWith(".ts")) {

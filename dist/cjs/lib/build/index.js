@@ -102,8 +102,8 @@ var isEndsWith = function (collection, name) {
 var buildComponent = function (Component, page, pageName, outdir, outWSdir) { return __awaiter(void 0, void 0, void 0, function () {
     var keys;
     return __generator(this, function (_a) {
+        keys = Object.keys(Component);
         if (isEndsWith([".tsx", ".jsx"], page)) {
-            keys = Object.keys(Component);
             buildReport['/' + pageName] = keys.includes("data");
             if (keys.includes("data") && keys.includes("server")) {
                 throw new Error("Page ".concat(pageName, " has both data and server. This is not supported."));
@@ -117,7 +117,12 @@ var buildComponent = function (Component, page, pageName, outdir, outWSdir) { re
             return [2 /*return*/, (0, create_static_1.createStaticFile)(Component, page, pageName, { outdir: outdir, bundle: true, data: keys.includes("data") })];
         }
         else {
-            buildReport['/' + pageName] = true;
+            if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
+                buildReport['/' + pageName] = "api";
+            }
+            else {
+                buildReport['/' + pageName] = true;
+            }
             console.timeEnd("🕧 Building: " + pageName);
             return [2 /*return*/, (0, create_server_1.generateServerScript)({ comp: page, outdir: outWSdir, pageName: pageName })];
         }
@@ -134,7 +139,6 @@ var tsxTransformOptions = {
     minify: true,
     jsx: 'automatic'
 };
-var hCode = "import { h } from 'preact';\n";
 function buildClient() {
     return __awaiter(this, void 0, void 0, function () {
         var pages, ssrdir, outdir_1, outWSdir_1, error_1;
@@ -189,6 +193,17 @@ function buildClient() {
         });
     });
 }
+function copyPublicFiles() {
+    var publicDir = (0, path_1.join)(process.cwd(), "public");
+    var outdir = (0, path_1.join)(".ssr", "output/static");
+    if ((0, fs_1.existsSync)(publicDir)) {
+        var files = (0, page_1.getPages)(publicDir, path_1.join);
+        files.forEach(function (file) {
+            var fileName = file.split(publicDir)[1];
+            (0, fs_1.createReadStream)(file).pipe((0, fs_1.createWriteStream)((0, path_1.join)(outdir, fileName)));
+        });
+    }
+}
 function build() {
     return __awaiter(this, void 0, void 0, function () {
         return __generator(this, function (_a) {
@@ -196,6 +211,7 @@ function build() {
                 case 0: return [4 /*yield*/, buildClient()];
                 case 1:
                     _a.sent();
+                    copyPublicFiles();
                     return [2 /*return*/, buildReport];
             }
         });

@@ -155,6 +155,7 @@ function server() {
         res.writeStatus("404");
         res.end("404 Not Found");
     }
+    var isStatic = new Map();
     var cachedData = new Map();
     var cachedChange = [];
     var cachedDataPages = new Map();
@@ -323,18 +324,29 @@ function server() {
             return acc;
         }, new Map());
     }
+    var cacheAPIMethods = new Map();
+    var getAPIMethod = function (pageName, methodName) {
+        var key = "".concat(pageName, ".").concat(methodName);
+        if (cacheAPIMethods.has(key)) {
+            return cacheAPIMethods.get(key);
+        }
+        else {
+            var api = getModuleFromPage(pageName);
+            var result = api[methodName];
+            cacheAPIMethods.set(key, result);
+            return result;
+        }
+    };
     function renderAPI(res, req, pageName) {
         return __awaiter(this, void 0, void 0, function () {
-            var method, module_1, body, api, params, dataCall, data, _a, e_2;
+            var method, body, api, params, dataCall, data, _a, e_2;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
-                        _b.trys.push([0, 8, , 9]);
+                        _b.trys.push([0, 6, , 7]);
                         method = req.getMethod();
-                        module_1 = getModuleFromPage(pageName);
-                        if (!method.includes(method)) return [3 /*break*/, 6];
                         body = {};
-                        api = module_1[method];
+                        api = getAPIMethod(pageName, method);
                         if (!(method !== "get")) return [3 /*break*/, 2];
                         return [4 /*yield*/, new Promise(function (resolve, reject) {
                                 readJson(res, function (obj) {
@@ -348,7 +360,7 @@ function server() {
                         body = _b.sent();
                         _b.label = 2;
                     case 2:
-                        params = getParams(req, pageName);
+                        params = pageName.includes(":") ? getParams(req, pageName) : undefined;
                         dataCall = api({
                             url: pageName,
                             body: body,
@@ -378,16 +390,11 @@ function server() {
                         }
                         return [3 /*break*/, 7];
                     case 6:
-                        render404(res);
-                        console.log("Method not allowed");
-                        _b.label = 7;
-                    case 7: return [3 /*break*/, 9];
-                    case 8:
                         e_2 = _b.sent();
                         console.error(e_2);
                         render404(res);
-                        return [3 /*break*/, 9];
-                    case 9: return [2 /*return*/];
+                        return [3 /*break*/, 7];
+                    case 7: return [2 /*return*/];
                 }
             });
         });
@@ -459,7 +466,7 @@ function server() {
     function render(res, req, path, params) {
         if (path === void 0) { path = req.getUrl(); }
         return __awaiter(this, void 0, void 0, function () {
-            var exts, pageName, staticPath_1, newPageName, filePath, fileExists, stream, size, splittedPath, p, newPath_1, file, error_1;
+            var exts, pageName, staticPath_1, newPageName, fileExists, filePath, stream, size, splittedPath, p, newPath_1, file, error_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -480,9 +487,9 @@ function server() {
                         if (newPageName && path.includes("/:")) {
                             return [2 /*return*/, render(res, req, newPageName, params)];
                         }
-                        filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "static", "".concat(pageName, ".html"));
-                        fileExists = (0, fs_1.existsSync)(filePath);
+                        fileExists = isStatic.get(pageName);
                         if (!fileExists) return [3 /*break*/, 3];
+                        filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "static", "".concat(pageName, ".html"));
                         stream = (0, fs_1.createReadStream)(filePath);
                         size = stream.bytesRead;
                         return [2 /*return*/, pipeStreamOverResponse(res, stream, size)];
@@ -594,25 +601,62 @@ function server() {
         return 0;
     })
         .forEach(function (pageServerName) {
+        var filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "static", "".concat(pageServerName, ".html"));
         var pageName = pageServerName.replace("/index", "/");
-        app.any(pageName, function (res, req) { return __awaiter(_this, void 0, void 0, function () {
-            var path, exts, isServer;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        path = req.getUrl();
-                        exts = path.split(".");
-                        if (!(exts.length > 1)) return [3 /*break*/, 1];
-                        return [2 /*return*/, renderStatic(res, exts, path)];
-                    case 1:
-                        isServer = buildReport[pageServerName] === 'server';
-                        if (!isServer) return [3 /*break*/, 3];
-                        return [4 /*yield*/, renderServer(res, pageServerName)];
-                    case 2: return [2 /*return*/, _a.sent()];
-                    case 3: return [2 /*return*/, render(res, req, pageServerName)];
+        var isPage = (0, fs_1.existsSync)(filePath);
+        var isServer = buildReport[pageServerName] === 'server';
+        var isApi = buildReport[pageServerName] === 'api';
+        isStatic.set(pageServerName, isPage);
+        if (isServer) {
+            app.any(pageName, function (res) { return __awaiter(_this, void 0, void 0, function () {
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, renderServer(res, pageServerName)];
+                        case 1: return [2 /*return*/, _a.sent()];
+                    }
+                });
+            }); });
+        }
+        else if (isApi || !isPage) {
+            app.any(pageName, function (res, req) {
+                var path = req.getUrl();
+                if (path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".map") || path.endsWith(".html")) {
+                    return render(res, req);
+                }
+                else {
+                    return renderAPI(res, req, pageServerName);
                 }
             });
-        }); });
+        }
+        else if (isPage) {
+            app.get(pageName, function (res, req) {
+                var path = req.getUrl();
+                if (path.endsWith(".bundle.js") || path.endsWith(".data.css")) {
+                    return render(res, req);
+                }
+                else {
+                    var stream = (0, fs_1.createReadStream)(filePath);
+                    var size = stream.bytesRead;
+                    return pipeStreamOverResponse(res, stream, size);
+                }
+            });
+        }
+        else {
+            app.any(pageName, function (res, req) { return __awaiter(_this, void 0, void 0, function () {
+                var path, exts;
+                return __generator(this, function (_a) {
+                    path = req.getUrl();
+                    exts = path.split(".");
+                    if (exts.length > 1) {
+                        return [2 /*return*/, renderStatic(res, exts, path)];
+                    }
+                    else {
+                        return [2 /*return*/, render(res, req, pageServerName)];
+                    }
+                    return [2 /*return*/];
+                });
+            }); });
+        }
         app.get("".concat(pageServerName, ".bundle.js"), function (res, req) {
             var path = req.getUrl();
             var exts = path.split(".");
