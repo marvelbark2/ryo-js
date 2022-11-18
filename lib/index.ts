@@ -18,7 +18,9 @@ import { getPages } from "./utils/page";
 export default function server() {
     babelRegister({
         presets: ["preact"],
-
+        cache: true,
+        compact: true,
+        extensions: [".js", ".jsx", ".ts", ".tsx"],
     });
     const _require = require;
 
@@ -321,7 +323,6 @@ export default function server() {
                     pipeStreamOverResponse(res, data.stream, data.length);
                 } else {
                     res.writeHeader("Content-Type", "application/json");
-                    console.log({ data, api: Object.keys(data) });
                     return res.end(JSON.stringify(data));
                 }
             } else {
@@ -535,6 +536,43 @@ export default function server() {
 
     }
 
+    const headers = [
+        ['Content-Type', 'text/event-stream'],
+        ['Connection', 'keep-alive'],
+        ['Cache-Control', 'no-cache']
+    ]
+
+    function sendHeaders(res: uws.HttpResponse) {
+        for (const [header, value] of headers) {
+            res.writeHeader(header, value)
+        }
+    }
+
+    function serializeData(data: any) {
+        return `data: ${JSON.stringify(data)}\n\n`
+    }
+
+    function renderEvent(res: uws.HttpResponse, pageName: string) {
+        res.onAborted(() => {
+            res.aborted = true;
+        });
+        const getEvent = getModuleFromPage(pageName);
+        const event = getEvent.default;
+
+        if (event) {
+            sendHeaders(res);
+            res.writeStatus('200 OK');
+            let intervalRef = setInterval(async () => {
+                res.write(serializeData(await event.runner()))
+            }, event.invalidate)
+
+            res.onAborted(() => {
+                clearInterval(intervalRef)
+            })
+        }
+    }
+
+
     Object.keys(buildReport)
         .sort((a, b) => {
             if (a === "/index") return -1;
@@ -550,12 +588,18 @@ export default function server() {
             const isPage = existsSync(filePath);
             const isServer = buildReport[pageServerName] === 'server';
             const isApi = buildReport[pageServerName] === 'api';
+            const isEvent = buildReport[pageServerName] === 'event';
 
             isStatic.set(pageServerName, isPage);
 
             if (isServer) {
-                app.any(pageName, async (res) => {
-                    return await renderServer(res, pageServerName);
+                app.any(pageName, (res) => {
+                    console.log("Server", pageName);
+                    return renderServer(res, pageServerName);
+                })
+            } else if (isEvent) {
+                app.get(pageName, async (res) => {
+                    return await renderEvent(res, pageServerName);
                 })
             } else if (isApi || !isPage) {
                 app.any(pageName, (res, req) => {
@@ -621,7 +665,7 @@ export default function server() {
     const timers = new Map();
     Object.entries(buildReport).forEach(([page, hasData]) => {
         if (hasData || page.includes("/:")) {
-            app.ws(page, {
+            app.ws(`${page}.data`, {
                 compression: uws.SHARED_COMPRESSOR,
                 maxPayloadLength: 16 * 1024 * 1024,
                 idleTimeout: 16,

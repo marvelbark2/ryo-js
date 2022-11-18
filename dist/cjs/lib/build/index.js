@@ -120,6 +120,9 @@ var buildComponent = function (Component, page, pageName, outdir, outWSdir) { re
             if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
                 buildReport['/' + pageName] = "api";
             }
+            else if (isEndsWith([".ev.js", "ev.ts"], page)) {
+                buildReport['/' + pageName] = "event";
+            }
             else {
                 buildReport['/' + pageName] = true;
             }
@@ -158,6 +161,9 @@ function buildClient() {
                             .filter(function (page) { return isEndsWith([".js", ".jsx", ".ts", ".tsx"], page); })
                             .map(function (page) {
                             var _a;
+                            if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx"], page)) {
+                                throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
+                            }
                             var pageName = (0, page_1.getPageName)(page);
                             console.time("🕧 Building: " + pageName);
                             if (page.endsWith(".ts")) {

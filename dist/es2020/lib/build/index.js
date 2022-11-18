@@ -43,6 +43,9 @@ const buildComponent = async (Component, page, pageName, outdir, outWSdir) => {
         if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
             buildReport['/' + pageName] = "api";
         }
+        else if (isEndsWith([".ev.js", "ev.ts"], page)) {
+            buildReport['/' + pageName] = "event";
+        }
         else {
             buildReport['/' + pageName] = true;
         }
@@ -73,6 +76,9 @@ async function buildClient() {
         await Promise.allSettled(pages
             .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx"], page))
             .map((page) => {
+            if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx"], page)) {
+                throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
+            }
             const pageName = getPageName(page);
             console.time("🕧 Building: " + pageName);
             if (page.endsWith(".ts")) {

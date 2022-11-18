@@ -77,6 +77,9 @@ function server() {
     var _this = this;
     (0, register_1.default)({
         presets: ["preact"],
+        cache: true,
+        compact: true,
+        extensions: [".js", ".jsx", ".ts", ".tsx"],
     });
     var _require = require;
     /* Helper function converting Node.js buffer to ArrayBuffer */
@@ -392,7 +395,6 @@ function server() {
                         }
                         else {
                             res.writeHeader("Content-Type", "application/json");
-                            console.log({ data: data, api: Object.keys(data) });
                             return [2 /*return*/, res.end(JSON.stringify(data))];
                         }
                         return [3 /*break*/, 7];
@@ -597,6 +599,49 @@ function server() {
             });
         });
     }
+    var headers = [
+        ['Content-Type', 'text/event-stream'],
+        ['Connection', 'keep-alive'],
+        ['Cache-Control', 'no-cache']
+    ];
+    function sendHeaders(res) {
+        for (var _i = 0, headers_1 = headers; _i < headers_1.length; _i++) {
+            var _a = headers_1[_i], header = _a[0], value = _a[1];
+            res.writeHeader(header, value);
+        }
+    }
+    function serializeData(data) {
+        return "data: ".concat(JSON.stringify(data), "\n\n");
+    }
+    function renderEvent(res, pageName) {
+        var _this = this;
+        var getEvent = getModuleFromPage(pageName);
+        var event = getEvent.default;
+        if (event) {
+            sendHeaders(res);
+            res.writeStatus('200 OK');
+            var intervalRef_1 = setInterval(function () { return __awaiter(_this, void 0, void 0, function () {
+                var _a, _b, _c;
+                return __generator(this, function (_d) {
+                    switch (_d.label) {
+                        case 0:
+                            res.onAborted(function () {
+                                res.aborted = true;
+                            });
+                            _b = (_a = res).write;
+                            _c = serializeData;
+                            return [4 /*yield*/, event.runner()];
+                        case 1:
+                            _b.apply(_a, [_c.apply(void 0, [_d.sent()])]);
+                            return [2 /*return*/];
+                    }
+                });
+            }); }, event.invalidate);
+            res.onAborted(function () {
+                clearInterval(intervalRef_1);
+            });
+        }
+    }
     Object.keys(buildReport)
         .sort(function (a, b) {
         if (a === "/index")
@@ -615,12 +660,19 @@ function server() {
         var isPage = (0, fs_1.existsSync)(filePath);
         var isServer = buildReport[pageServerName] === 'server';
         var isApi = buildReport[pageServerName] === 'api';
+        var isEvent = buildReport[pageServerName] === 'event';
         isStatic.set(pageServerName, isPage);
         if (isServer) {
-            app.any(pageName, function (res) { return __awaiter(_this, void 0, void 0, function () {
+            app.any(pageName, function (res) {
+                console.log("Server", pageName);
+                return renderServer(res, pageServerName);
+            });
+        }
+        else if (isEvent) {
+            app.get(pageName, function (res) { return __awaiter(_this, void 0, void 0, function () {
                 return __generator(this, function (_a) {
                     switch (_a.label) {
-                        case 0: return [4 /*yield*/, renderServer(res, pageServerName)];
+                        case 0: return [4 /*yield*/, renderEvent(res, pageServerName)];
                         case 1: return [2 /*return*/, _a.sent()];
                     }
                 });
@@ -700,7 +752,7 @@ function server() {
     Object.entries(buildReport).forEach(function (_a) {
         var page = _a[0], hasData = _a[1];
         if (hasData || page.includes("/:")) {
-            app.ws(page, {
+            app.ws("".concat(page, ".data"), {
                 compression: uws.SHARED_COMPRESSOR,
                 maxPayloadLength: 16 * 1024 * 1024,
                 idleTimeout: 16,

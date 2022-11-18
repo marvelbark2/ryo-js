@@ -2,6 +2,14 @@ import { join } from "path";
 import { build } from "esbuild";
 import { existsSync } from "fs";
 
+
+let makeAllPackagesExternalPlugin = {
+    name: 'make-all-packages-external',
+    setup(build: any) {
+        let filter = /^[^.\/]|^\.[^.\/]|^\.\.[^\/]/ // Must not start with "/" or "./" or "../"
+        build.onResolve({ filter }, (args: any) => ({ path: args.path, external: true }))
+    },
+}
 export async function generateServerScript({
     comp,
     outdir = ".ssr/output/data/",
@@ -27,6 +35,7 @@ export async function generateServerScript({
             outfile: out,
             tsconfig: existsSync(tsConfig) ? tsConfig : undefined,
             allowOverwrite: false,
+            plugins: [makeAllPackagesExternalPlugin]
         });
     } catch (e) {
         console.error(e);

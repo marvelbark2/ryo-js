@@ -36,7 +36,7 @@ const getHydrationScript = (filePath: string, pageName: string) => `
   if(window.getData) {
     hydrate(createElement(Component, {data: JSON.parse(window.getData())}), document.getElementById("root"))
 
-    const ws = new WebSocket('ws://'+ window.location.host + '/${pageName}')
+    const ws = new WebSocket('ws://'+ window.location.host + '/${pageName}.data')
   
     ws.onopen = () => {
       ws.onmessage = (e) => {
