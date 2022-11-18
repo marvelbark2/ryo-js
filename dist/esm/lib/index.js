@@ -585,10 +585,29 @@ export default function server() {
     function serializeData(data) {
         return "data: ".concat(JSON.stringify(data), "\n\n");
     }
-    function renderEvent(res, pageName) {
+    function renderEvent(res, req, pageName) {
         var _this = this;
+        res.onAborted(function () {
+            res.aborted = true;
+        });
         var getEvent = getModuleFromPage(pageName);
         var event = getEvent.default;
+        var payload = {
+            url: req.getUrl(),
+            params: undefined
+        };
+        if (pageName.includes("/:")) {
+            var params = getParams(req, pageName);
+            if (params) {
+                // @ts-ignore
+                payload.params = Array.from(params.entries()).reduce(function (acc, _a) {
+                    var key = _a[0], value = _a[1];
+                    // @ts-ignore
+                    acc[key.replace(".ev", "")] = value.replace(".ev", "");
+                    return acc;
+                }, {});
+            }
+        }
         if (event) {
             sendHeaders(res);
             res.writeStatus('200 OK');
@@ -597,12 +616,9 @@ export default function server() {
                 return __generator(this, function (_d) {
                     switch (_d.label) {
                         case 0:
-                            res.onAborted(function () {
-                                res.aborted = true;
-                            });
                             _b = (_a = res).write;
                             _c = serializeData;
-                            return [4 /*yield*/, event.runner()];
+                            return [4 /*yield*/, event.runner(payload)];
                         case 1:
                             _b.apply(_a, [_c.apply(void 0, [_d.sent()])]);
                             return [2 /*return*/];
@@ -612,6 +628,10 @@ export default function server() {
             res.onAborted(function () {
                 clearInterval(intervalRef_1);
             });
+        }
+        else {
+            console.log("No event found");
+            render404(res);
         }
     }
     Object.keys(buildReport)
@@ -641,14 +661,10 @@ export default function server() {
             });
         }
         else if (isEvent) {
-            app.get(pageName, function (res) { return __awaiter(_this, void 0, void 0, function () {
-                return __generator(this, function (_a) {
-                    switch (_a.label) {
-                        case 0: return [4 /*yield*/, renderEvent(res, pageServerName)];
-                        case 1: return [2 /*return*/, _a.sent()];
-                    }
-                });
-            }); });
+            console.log({ event: pageName });
+            app.get(pageName, function (res, req) {
+                return renderEvent(res, req, pageServerName);
+            });
         }
         else if (isApi || !isPage) {
             app.any(pageName, function (res, req) {

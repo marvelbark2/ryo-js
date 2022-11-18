@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.1",
+  "version": "0.0.1.memo.1",
   "description": "Fullstack framework",
   "scripts": {
     "start": "node lib/index.module.js",

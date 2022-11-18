@@ -503,21 +503,40 @@ export default function server() {
     function serializeData(data) {
         return `data: ${JSON.stringify(data)}\n\n`;
     }
-    function renderEvent(res, pageName) {
+    function renderEvent(res, req, pageName) {
+        res.onAborted(() => {
+            res.aborted = true;
+        });
         const getEvent = getModuleFromPage(pageName);
         const event = getEvent.default;
+        let payload = {
+            url: req.getUrl(),
+            params: undefined
+        };
+        if (pageName.includes("/:")) {
+            const params = getParams(req, pageName);
+            if (params) {
+                // @ts-ignore
+                payload.params = Array.from(params.entries()).reduce((acc, [key, value]) => {
+                    // @ts-ignore
+                    acc[key.replace(".ev", "")] = value.replace(".ev", "");
+                    return acc;
+                }, {});
+            }
+        }
         if (event) {
             sendHeaders(res);
             res.writeStatus('200 OK');
             let intervalRef = setInterval(async () => {
-                res.onAborted(() => {
-                    res.aborted = true;
-                });
-                res.write(serializeData(await event.runner()));
+                res.write(serializeData(await event.runner(payload)));
             }, event.invalidate);
             res.onAborted(() => {
                 clearInterval(intervalRef);
             });
+        }
+        else {
+            console.log("No event found");
+            render404(res);
         }
     }
     Object.keys(buildReport)
@@ -547,8 +566,9 @@ export default function server() {
             });
         }
         else if (isEvent) {
-            app.get(pageName, async (res) => {
-                return await renderEvent(res, pageServerName);
+            console.log({ event: pageName });
+            app.get(pageName, (res, req) => {
+                return renderEvent(res, req, pageServerName);
             });
         }
         else if (isApi || !isPage) {
