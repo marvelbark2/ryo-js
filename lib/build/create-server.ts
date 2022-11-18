@@ -7,13 +7,14 @@ export async function generateServerScript({
     outdir = ".ssr/output/data/",
     pageName,
     bundleConstants = {
-        treeShaking: false,
-        minify: false,
+        treeShaking: true,
+        minify: true,
         loader: { ".ts": "ts", ".js": "js" },
     }
 }: { comp: any; outdir?: string; pageName: string; bundleConstants?: any }) {
     const isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
     try {
+
         const out = join(outdir, isWS ? "ws" : ".", `${pageName}.js`)
         const tsConfig = join(process.cwd(), "tsconfig.json");
         return await build({
@@ -22,9 +23,10 @@ export async function generateServerScript({
             bundle: true,
             target: "node14",
             format: "esm",
+            platform: "node",
             outfile: out,
             tsconfig: existsSync(tsConfig) ? tsConfig : undefined,
-            allowOverwrite: false
+            allowOverwrite: false,
         });
     } catch (e) {
         console.error(e);

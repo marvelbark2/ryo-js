@@ -2,8 +2,8 @@ import { join } from "path";
 import { build } from "esbuild";
 import { existsSync } from "fs";
 export async function generateServerScript({ comp, outdir = ".ssr/output/data/", pageName, bundleConstants = {
-    treeShaking: false,
-    minify: false,
+    treeShaking: true,
+    minify: true,
     loader: { ".ts": "ts", ".js": "js" },
 } }) {
     const isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
@@ -16,9 +16,10 @@ export async function generateServerScript({ comp, outdir = ".ssr/output/data/",
             bundle: true,
             target: "node14",
             format: "esm",
+            platform: "node",
             outfile: out,
             tsconfig: existsSync(tsConfig) ? tsConfig : undefined,
-            allowOverwrite: false
+            allowOverwrite: false,
         });
     }
     catch (e) {

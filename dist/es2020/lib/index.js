@@ -248,16 +248,21 @@ export default function server() {
         else {
             const api = getModuleFromPage(pageName);
             const result = api[methodName];
+            if (!result)
+                return undefined;
             cacheAPIMethods.set(key, result);
             return result;
         }
     };
     async function renderAPI(res, req, pageName) {
         try {
+            res.onAborted(() => {
+                res.aborted = true;
+            });
             const method = req.getMethod();
-            {
+            const api = getAPIMethod(pageName, method);
+            if (api) {
                 let body = {};
-                const api = getAPIMethod(pageName, method);
                 if (method !== "get") {
                     body = await new Promise((resolve, reject) => {
                         readJson(res, (obj) => {
@@ -274,7 +279,7 @@ export default function server() {
                     body: body,
                     params: params ? Object.fromEntries(params) : undefined,
                 });
-                const data = api.constructor.name === 'AsyncFunction' ? await dataCall : dataCall;
+                const data = dataCall.then ? await dataCall : dataCall;
                 if (Object.keys(data).includes("stream")) {
                     if (!data.length) {
                         render404(res);
@@ -285,8 +290,12 @@ export default function server() {
                 }
                 else {
                     res.writeHeader("Content-Type", "application/json");
-                    res.end(JSON.stringify(data));
+                    console.log({ data, api: Object.keys(data) });
+                    return res.end(JSON.stringify(data));
                 }
+            }
+            else {
+                return render404(res);
             }
         }
         catch (e) {

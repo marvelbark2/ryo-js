@@ -50,8 +50,8 @@ import { build } from "esbuild";
 import { existsSync } from "fs";
 export function generateServerScript(_a) {
     var comp = _a.comp, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/data/" : _b, pageName = _a.pageName, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
-        treeShaking: false,
-        minify: false,
+        treeShaking: true,
+        minify: true,
         loader: { ".ts": "ts", ".js": "js" },
     } : _c;
     return __awaiter(this, void 0, void 0, function () {
@@ -65,7 +65,7 @@ export function generateServerScript(_a) {
                     _d.trys.push([1, 3, , 4]);
                     out = join(outdir, isWS ? "ws" : ".", "".concat(pageName, ".js"));
                     tsConfig = join(process.cwd(), "tsconfig.json");
-                    return [4 /*yield*/, build(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", outfile: out, tsconfig: existsSync(tsConfig) ? tsConfig : undefined, allowOverwrite: false }))];
+                    return [4 /*yield*/, build(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", platform: "node", outfile: out, tsconfig: existsSync(tsConfig) ? tsConfig : undefined, allowOverwrite: false }))];
                 case 2: return [2 /*return*/, _d.sent()];
                 case 3:
                     e_1 = _d.sent();

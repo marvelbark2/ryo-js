@@ -333,20 +333,26 @@ function server() {
         else {
             var api = getModuleFromPage(pageName);
             var result = api[methodName];
+            if (!result)
+                return undefined;
             cacheAPIMethods.set(key, result);
             return result;
         }
     };
     function renderAPI(res, req, pageName) {
         return __awaiter(this, void 0, void 0, function () {
-            var method, body, api, params, dataCall, data, _a, e_2;
+            var method, api, body, params, dataCall, data, _a, e_2;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
-                        _b.trys.push([0, 6, , 7]);
+                        _b.trys.push([0, 8, , 9]);
+                        res.onAborted(function () {
+                            res.aborted = true;
+                        });
                         method = req.getMethod();
-                        body = {};
                         api = getAPIMethod(pageName, method);
+                        if (!api) return [3 /*break*/, 6];
+                        body = {};
                         if (!(method !== "get")) return [3 /*break*/, 2];
                         return [4 /*yield*/, new Promise(function (resolve, reject) {
                                 readJson(res, function (obj) {
@@ -366,7 +372,7 @@ function server() {
                             body: body,
                             params: params ? Object.fromEntries(params) : undefined,
                         });
-                        if (!(api.constructor.name === 'AsyncFunction')) return [3 /*break*/, 4];
+                        if (!dataCall.then) return [3 /*break*/, 4];
                         return [4 /*yield*/, dataCall];
                     case 3:
                         _a = _b.sent();
@@ -386,15 +392,18 @@ function server() {
                         }
                         else {
                             res.writeHeader("Content-Type", "application/json");
-                            res.end(JSON.stringify(data));
+                            console.log({ data: data, api: Object.keys(data) });
+                            return [2 /*return*/, res.end(JSON.stringify(data))];
                         }
                         return [3 /*break*/, 7];
-                    case 6:
+                    case 6: return [2 /*return*/, render404(res)];
+                    case 7: return [3 /*break*/, 9];
+                    case 8:
                         e_2 = _b.sent();
                         console.error(e_2);
                         render404(res);
-                        return [3 /*break*/, 7];
-                    case 7: return [2 /*return*/];
+                        return [3 /*break*/, 9];
+                    case 9: return [2 /*return*/];
                 }
             });
         });
