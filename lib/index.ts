@@ -15,9 +15,10 @@ import { createElement } from "preact";
 import { generateClientBundle } from "./runtime/transpilor";
 import { getPages } from "./utils/page";
 
+// TODO: Convert renders to abstracted classes
 export default function server() {
     babelRegister({
-        presets: ["preact"],
+        presets: ["preact", "@babel/preset-env"],
         cache: true,
         compact: true,
         extensions: [".js", ".jsx", ".ts", ".tsx"],
@@ -285,7 +286,6 @@ export default function server() {
         }
     }
     async function renderAPI(res: uws.HttpResponse, req: uws.HttpRequest, pageName: string) {
-
         try {
             res.onAborted(() => {
                 res.aborted = true;
@@ -335,7 +335,7 @@ export default function server() {
         }
     }
 
-    function caching(res: uws.HttpResponse) {
+    function cachingBundles(res: uws.HttpResponse) {
         res.writeHeader("Cache-Control", "public, max-age=31536000");
         res.writeHeader("Expires", new Date(Date.now() + 31536000000).toUTCString());
         res.writeHeader("Vary", "Accept-Encoding");
@@ -451,12 +451,10 @@ export default function server() {
         const isExist = existsSync(wsPath);
         if (isExist) {
             const files = getPages(wsPath, join);
-            files.forEach((file) => {
+            files.forEach(async (file) => {
                 const object = _require(file).default;
                 const fileName = file.split("/server/ws/");
                 const pageName = fileName[1].split(".ws.js")[0];
-
-
                 app.ws(`/${pageName}`, {
                     compression: uws.SHARED_COMPRESSOR,
                     maxPayloadLength: 16 * 1024 * 1024,
@@ -617,7 +615,6 @@ export default function server() {
                     return renderServer(res, pageServerName);
                 })
             } else if (isEvent) {
-                console.log({ event: pageName })
                 app.get(pageName, (res, req) => {
                     return renderEvent(res, req, pageServerName);
                 })
@@ -642,7 +639,7 @@ export default function server() {
                     }
                 })
             } else {
-                app.any(pageName, async (res, req) => {
+                app.any(pageName, (res, req) => {
                     const path = req.getUrl();
                     const exts = path.split(".");
                     if (exts.length > 1) {
@@ -655,6 +652,9 @@ export default function server() {
 
 
             app.get(`${pageServerName}.bundle.js`, (res, req) => {
+                if (process.env.NODE_ENV === "production") {
+                    cachingBundles(res);
+                }
                 const path = req.getUrl();
                 const exts = path.split(".");
                 return renderStatic(res, exts, path);

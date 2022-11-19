@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.1.memo.1",
+  "version": "0.0.0-meme.3",
   "description": "Fullstack framework",
   "scripts": {
     "start": "node lib/index.module.js",
@@ -10,7 +10,7 @@
     "build:esm": "tsc --module es2020 --target es5 --outDir dist/esm",
     "build:cjs": "tsc --module commonjs --target es5 --outDir dist/cjs --isolatedModules true --declaration false"
   },
-  "keywords": [],
+  "keywords": ["preact", "framework-js", "ssg", "ssr"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marvelbark2/ryo-js"

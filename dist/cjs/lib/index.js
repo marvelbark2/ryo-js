@@ -76,7 +76,7 @@ var page_1 = require("./utils/page");
 function server() {
     var _this = this;
     (0, register_1.default)({
-        presets: ["preact"],
+        presets: ["preact", "@babel/preset-env"],
         cache: true,
         compact: true,
         extensions: [".js", ".jsx", ".ts", ".tsx"],
@@ -533,24 +533,29 @@ function server() {
         });
     }
     function loadWSEndpoints() {
+        var _this = this;
         var wsPath = (0, path_1.join)(process.cwd(), ".ssr", "output", "server", "ws");
         var isExist = (0, fs_1.existsSync)(wsPath);
         if (isExist) {
             var files = (0, page_1.getPages)(wsPath, path_1.join);
-            files.forEach(function (file) {
-                var object = _require(file).default;
-                var fileName = file.split("/server/ws/");
-                var pageName = fileName[1].split(".ws.js")[0];
-                app.ws("/".concat(pageName), {
-                    compression: uws.SHARED_COMPRESSOR,
-                    maxPayloadLength: 16 * 1024 * 1024,
-                    idleTimeout: 16,
-                    open: object.open,
-                    message: object.message,
-                    drain: object.drain,
-                    close: object.close
+            files.forEach(function (file) { return __awaiter(_this, void 0, void 0, function () {
+                var object, fileName, pageName;
+                return __generator(this, function (_a) {
+                    object = _require(file).default;
+                    fileName = file.split("/server/ws/");
+                    pageName = fileName[1].split(".ws.js")[0];
+                    app.ws("/".concat(pageName), {
+                        compression: uws.SHARED_COMPRESSOR,
+                        maxPayloadLength: 16 * 1024 * 1024,
+                        idleTimeout: 16,
+                        open: object.open,
+                        message: object.message,
+                        drain: object.drain,
+                        close: object.close
+                    });
+                    return [2 /*return*/];
                 });
-            });
+            }); });
         }
         else {
             console.log("No ws endpoints found");
@@ -684,12 +689,10 @@ function server() {
         isStatic.set(pageServerName, isPage);
         if (isServer) {
             app.any(pageName, function (res) {
-                console.log("Server", pageName);
                 return renderServer(res, pageServerName);
             });
         }
         else if (isEvent) {
-            console.log({ event: pageName });
             app.get(pageName, function (res, req) {
                 return renderEvent(res, req, pageServerName);
             });

@@ -11,7 +11,7 @@ import { generateClientBundle } from "./runtime/transpilor";
 import { getPages } from "./utils/page";
 export default function server() {
     babelRegister({
-        presets: ["preact"],
+        presets: ["preact", "@babel/preset-env"],
         cache: true,
         compact: true,
         extensions: [".js", ".jsx", ".ts", ".tsx"],
@@ -418,7 +418,7 @@ export default function server() {
         const isExist = existsSync(wsPath);
         if (isExist) {
             const files = getPages(wsPath, join);
-            files.forEach((file) => {
+            files.forEach(async (file) => {
                 const object = _require(file).default;
                 const fileName = file.split("/server/ws/");
                 const pageName = fileName[1].split(".ws.js")[0];
@@ -561,12 +561,10 @@ export default function server() {
         isStatic.set(pageServerName, isPage);
         if (isServer) {
             app.any(pageName, (res) => {
-                console.log("Server", pageName);
                 return renderServer(res, pageServerName);
             });
         }
         else if (isEvent) {
-            console.log({ event: pageName });
             app.get(pageName, (res, req) => {
                 return renderEvent(res, req, pageServerName);
             });
