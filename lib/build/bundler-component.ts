@@ -1,6 +1,8 @@
 import { join } from "path";
 import { build } from "esbuild";
-import compress from "@luncheon/esbuild-plugin-gzip"
+import compress from "@luncheon/esbuild-plugin-gzip";
+import { watchOnDev } from "../utils/global";
+
 
 const fetchParams = (pageName: string) => {
     if (pageName.includes(':')) {
@@ -85,6 +87,7 @@ export async function generateClientBundle({
             plugins: [compress({ gzip: true })],
             target: "esnext",
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
+            ...watchOnDev,
         })
     } catch (e) {
         console.error({ e, filePath });

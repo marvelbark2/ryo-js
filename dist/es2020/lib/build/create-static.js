@@ -4,6 +4,7 @@ import { writeFileSync } from "fs";
 import { render } from "preact-render-to-string";
 import { createElement } from "preact";
 import { build } from "esbuild";
+import { watchOnDev } from "../utils/global.js";
 async function generateData(filePath, pageName) {
     const building = await build({
         bundle: true,
@@ -13,6 +14,7 @@ async function generateData(filePath, pageName) {
         target: "node15",
         platform: 'node',
         outfile: join(".ssr/output/server/data", `${pageName}.data.js`),
+        ...watchOnDev
     });
     return building;
 }

@@ -1,3 +1,14 @@
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -40,20 +51,13 @@ import { writeFileSync } from "fs";
 import { render } from "preact-render-to-string";
 import { createElement } from "preact";
 import { build } from "esbuild";
+import { watchOnDev } from "../utils/global.js";
 function generateData(filePath, pageName) {
     return __awaiter(this, void 0, void 0, function () {
         var building;
         return __generator(this, function (_a) {
             switch (_a.label) {
-                case 0: return [4 /*yield*/, build({
-                        bundle: true,
-                        minify: true,
-                        treeShaking: true,
-                        entryPoints: [filePath],
-                        target: "node15",
-                        platform: 'node',
-                        outfile: join(".ssr/output/server/data", "".concat(pageName, ".data.js")),
-                    })];
+                case 0: return [4 /*yield*/, build(__assign({ bundle: true, minify: true, treeShaking: true, entryPoints: [filePath], target: "node15", platform: 'node', outfile: join(".ssr/output/server/data", "".concat(pageName, ".data.js")) }, watchOnDev))];
                 case 1:
                     building = _a.sent();
                     return [2 /*return*/, building];

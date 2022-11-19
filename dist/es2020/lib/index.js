@@ -9,12 +9,15 @@ import "./polyfills/index";
 import { createElement } from "preact";
 import { generateClientBundle } from "./runtime/transpilor";
 import { getPages } from "./utils/page";
-export default function server() {
+let uwsToken;
+const requireCaches = new Set();
+// TODO: Convert renders to abstracted classes
+export default function server(env = "production") {
     babelRegister({
         presets: ["preact", "@babel/preset-env"],
+        extensions: [".js", ".jsx", ".ts", ".tsx"],
         cache: true,
         compact: true,
-        extensions: [".js", ".jsx", ".ts", ".tsx"],
     });
     const _require = require;
     /* Helper function converting Node.js buffer to ArrayBuffer */
@@ -103,6 +106,7 @@ export default function server() {
         }
         else {
             const filePath = join(process.cwd(), ".ssr", "output", "server", "data", `${pageName}.data.js`);
+            requireCaches.add(filePath);
             const result = _require(filePath);
             cachedDataPages.set(pageName, result);
             return result;
@@ -213,15 +217,9 @@ export default function server() {
     }
     const apiModulesCache = new Map();
     const getModuleFromPage = (pageName) => {
-        if (apiModulesCache.has(pageName)) {
-            return apiModulesCache.get(pageName);
-        }
-        else {
-            const filePath = join(process.cwd(), ".ssr", "output", "server", `${pageName}.js`);
-            const result = _require(filePath);
-            apiModulesCache.set(pageName, result);
-            return result;
-        }
+        const filePath = join(process.cwd(), ".ssr", "output", "server", `${pageName}.js`);
+        requireCaches.add(filePath);
+        return _require(filePath);
     };
     const addParam = (map, key, value, i = 0) => {
         if (!map.has(key)) {
@@ -244,17 +242,26 @@ export default function server() {
     }
     const cacheAPIMethods = new Map();
     const getAPIMethod = (pageName, methodName) => {
-        const key = `${pageName}.${methodName}`;
-        if (cacheAPIMethods.has(key)) {
-            return cacheAPIMethods.get(key);
-        }
-        else {
+        if (env === "dev") {
             const api = getModuleFromPage(pageName);
             const result = api[methodName];
             if (!result)
                 return undefined;
-            cacheAPIMethods.set(key, result);
             return result;
+        }
+        else {
+            const key = `${pageName}.${methodName}`;
+            if (cacheAPIMethods.has(key)) {
+                return cacheAPIMethods.get(key);
+            }
+            else {
+                const api = getModuleFromPage(pageName);
+                const result = api[methodName];
+                if (!result)
+                    return undefined;
+                cacheAPIMethods.set(key, result);
+                return result;
+            }
         }
     };
     async function renderAPI(res, req, pageName) {
@@ -277,10 +284,15 @@ export default function server() {
                     });
                 }
                 const params = pageName.includes(":") ? getParams(req, pageName) : undefined;
+                const headers = new Map();
+                req.forEach((key, value) => {
+                    headers.set(key, value);
+                });
                 const dataCall = api({
                     url: pageName,
                     body: body,
                     params: params ? Object.fromEntries(params) : undefined,
+                    headers,
                 });
                 const data = dataCall.then ? await dataCall : dataCall;
                 if (Object.keys(data).includes("stream")) {
@@ -305,7 +317,7 @@ export default function server() {
             render404(res);
         }
     }
-    function caching(res) {
+    function cachingBundles(res) {
         res.writeHeader("Cache-Control", "public, max-age=31536000");
         res.writeHeader("Expires", new Date(Date.now() + 31536000000).toUTCString());
         res.writeHeader("Vary", "Accept-Encoding");
@@ -419,6 +431,7 @@ export default function server() {
         if (isExist) {
             const files = getPages(wsPath, join);
             files.forEach(async (file) => {
+                requireCaches.add(file);
                 const object = _require(file).default;
                 const fileName = file.split("/server/ws/");
                 const pageName = fileName[1].split(".ws.js")[0];
@@ -572,7 +585,8 @@ export default function server() {
         else if (isApi || !isPage) {
             app.any(pageName, (res, req) => {
                 const path = req.getUrl();
-                if (path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".map") || path.endsWith(".html")) {
+                const isStaticFile = existsSync(join(process.cwd(), ".ssr", "output", "static", path));
+                if (isStaticFile) {
                     return render(res, req);
                 }
                 else {
@@ -594,7 +608,7 @@ export default function server() {
             });
         }
         else {
-            app.any(pageName, async (res, req) => {
+            app.any(pageName, (res, req) => {
                 const path = req.getUrl();
                 const exts = path.split(".");
                 if (exts.length > 1) {
@@ -606,6 +620,9 @@ export default function server() {
             });
         }
         app.get(`${pageServerName}.bundle.js`, (res, req) => {
+            if (env === "production") {
+                cachingBundles(res);
+            }
             const path = req.getUrl();
             const exts = path.split(".");
             return renderStatic(res, exts, path);
@@ -664,10 +681,21 @@ export default function server() {
     });
     app.listen(3000, (token) => {
         if (token) {
+            uwsToken = token;
             console.log("Listening to port 3000");
         }
         else {
             console.log("Failed to listen to port 3000");
         }
     });
+    return () => {
+        if (uwsToken) {
+            console.log('Shutting down now');
+            uws.us_listen_socket_close(uwsToken);
+            requireCaches.forEach((cache) => {
+                delete require.cache[cache];
+            });
+            uwsToken = null;
+        }
+    };
 }

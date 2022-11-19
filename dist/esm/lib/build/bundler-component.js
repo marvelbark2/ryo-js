@@ -48,6 +48,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 import { join } from "path";
 import { build } from "esbuild";
 import compress from "@luncheon/esbuild-plugin-gzip";
+import { watchOnDev } from "../utils/global";
 var fetchParams = function (pageName) {
     if (pageName.includes(':')) {
         return "window.fetchParams = () => {\n            const pageName = '".concat(pageName, "'.split('/')\n            const currentPage = window.location.pathname.split('/');\n            const params = {};\n            const searchParams = new URLSearchParams(window.location.search);\n            for(let [key, value] of searchParams.entries()) {\n                params[key] = value;\n            }\n            for(let i = 0; i < pageName.length; i++) {\n                if(pageName[i].includes(':')) {\n                    params[pageName[i].replace(':', '')] = currentPage[i + 1]\n                }\n            }\n            return params;\n          }");
@@ -74,10 +75,10 @@ export function generateClientBundle(_a) {
             switch (_d.label) {
                 case 0:
                     _d.trys.push([0, 2, , 3]);
-                    return [4 /*yield*/, build(__assign(__assign({}, bundleConstants), { bundle: true, minify: true, treeShaking: true, write: false, stdin: {
+                    return [4 /*yield*/, build(__assign(__assign(__assign({}, bundleConstants), { bundle: true, minify: true, treeShaking: true, write: false, stdin: {
                                 contents: getHydrationScript(filePath, pageName),
                                 resolveDir: process.cwd(),
-                            }, plugins: [compress({ gzip: true })], target: "esnext", outfile: join(".ssr/output/static", "".concat(pageName, ".bundle.js")) }))];
+                            }, plugins: [compress({ gzip: true })], target: "esnext", outfile: join(".ssr/output/static", "".concat(pageName, ".bundle.js")) }), watchOnDev))];
                 case 1: return [2 /*return*/, _d.sent()];
                 case 2:
                     e_1 = _d.sent();

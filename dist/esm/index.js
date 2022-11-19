@@ -40,6 +40,7 @@ import build from './lib/build';
 import register from '@babel/register';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
+import ps from "./lib/utils/pubsub";
 // @ts-ignore
 globalThis.register = register;
 register({
@@ -49,7 +50,7 @@ register({
 });
 var args = process.argv.slice(2);
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var before, buildReport, data, jsonReportPath;
+    var before, buildReport, data, jsonReportPath, buildReport, data, jsonReportPath, uws_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -63,16 +64,33 @@ var args = process.argv.slice(2);
                 jsonReportPath = join(process.cwd(), ".ssr/build-report.json");
                 writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
                 console.log("\n✅ Build completed in " + (new Date().getTime() - before) + "ms");
-                return [3 /*break*/, 3];
+                return [3 /*break*/, 6];
             case 2:
-                if (args.includes("start")) {
-                    server();
-                }
-                else {
-                    console.error("Invalid command");
-                }
-                _a.label = 3;
-            case 3: return [2 /*return*/];
+                if (!args.includes("start")) return [3 /*break*/, 3];
+                server();
+                return [3 /*break*/, 6];
+            case 3:
+                if (!args.includes("dev")) return [3 /*break*/, 5];
+                return [4 /*yield*/, build()];
+            case 4:
+                buildReport = _a.sent();
+                data = JSON.stringify(buildReport, null, 2);
+                console.log("🕧 Building pages report");
+                jsonReportPath = join(process.cwd(), ".ssr/build-report.json");
+                writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
+                uws_1 = server("dev");
+                ps.subscribe(function (msg) {
+                    console.log(msg);
+                    if (msg === "restart") {
+                        uws_1();
+                        uws_1 = server("dev");
+                    }
+                });
+                return [3 /*break*/, 6];
+            case 5:
+                console.error("Invalid command");
+                _a.label = 6;
+            case 6: return [2 /*return*/];
         }
     });
 }); })();

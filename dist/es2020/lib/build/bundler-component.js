@@ -1,6 +1,7 @@
 import { join } from "path";
 import { build } from "esbuild";
 import compress from "@luncheon/esbuild-plugin-gzip";
+import { watchOnDev } from "../utils/global";
 const fetchParams = (pageName) => {
     if (pageName.includes(':')) {
         return `window.fetchParams = () => {
@@ -78,6 +79,7 @@ export async function generateClientBundle({ filePath, outdir = ".ssr/output/sta
             plugins: [compress({ gzip: true })],
             target: "esnext",
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
+            ...watchOnDev,
         });
     }
     catch (e) {

@@ -45,16 +45,32 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
 import { join } from "path";
 import { build } from "esbuild";
 import { existsSync } from "fs";
-var makeAllPackagesExternalPlugin = {
-    name: 'make-all-packages-external',
-    setup: function (build) {
-        var filter = /^[^.\/]|^\.[^.\/]|^\.\.[^\/]/; // Must not start with "/" or "./" or "../"
-        build.onResolve({ filter: filter }, function (args) { return ({ path: args.path, external: true }); });
-    },
-};
+import { watchOnDev } from "../utils/global";
+export function getProjectPkg() {
+    return __awaiter(this, void 0, void 0, function () {
+        var pkg;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, import(join(process.cwd(), "package.json"))];
+                case 1:
+                    pkg = _a.sent();
+                    return [2 /*return*/, pkg];
+            }
+        });
+    });
+}
 export function generateServerScript(_a) {
     var comp = _a.comp, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/data/" : _b, pageName = _a.pageName, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
         treeShaking: true,
@@ -62,23 +78,24 @@ export function generateServerScript(_a) {
         loader: { ".ts": "ts", ".js": "js" },
     } : _c;
     return __awaiter(this, void 0, void 0, function () {
-        var isWS, out, tsConfig, e_1;
+        var isWS, out, tsConfig, pkg;
         return __generator(this, function (_d) {
             switch (_d.label) {
                 case 0:
                     isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
-                    _d.label = 1;
-                case 1:
-                    _d.trys.push([1, 3, , 4]);
                     out = join(outdir, isWS ? "ws" : ".", "".concat(pageName, ".js"));
                     tsConfig = join(process.cwd(), "tsconfig.json");
-                    return [4 /*yield*/, build(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", platform: "node", outfile: out, tsconfig: existsSync(tsConfig) ? tsConfig : undefined, allowOverwrite: false, plugins: [makeAllPackagesExternalPlugin] }))];
-                case 2: return [2 /*return*/, _d.sent()];
-                case 3:
-                    e_1 = _d.sent();
-                    console.error(e_1);
-                    return [3 /*break*/, 4];
-                case 4: return [2 /*return*/];
+                    return [4 /*yield*/, getProjectPkg()];
+                case 1:
+                    pkg = _d.sent();
+                    return [2 /*return*/, build(__assign(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", platform: "node", outfile: out, tsconfig: existsSync(tsConfig) ? tsConfig : undefined, allowOverwrite: false, external: __spreadArray(__spreadArray([], Object.keys(pkg.dependencies || {}), true), Object.keys(pkg.peerDependencies || {}), true) }), watchOnDev)).then(function (result) {
+                            if (result.errors.length > 0) {
+                                console.error(result.errors);
+                            }
+                            else {
+                                console.log("✅ Generated server script for " + pageName);
+                            }
+                        }).catch(console.error)];
             }
         });
     });

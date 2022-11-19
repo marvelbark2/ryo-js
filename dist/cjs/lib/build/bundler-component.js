@@ -54,6 +54,7 @@ exports.generateClientBundle = void 0;
 var path_1 = require("path");
 var esbuild_1 = require("esbuild");
 var esbuild_plugin_gzip_1 = __importDefault(require("@luncheon/esbuild-plugin-gzip"));
+var global_1 = require("../utils/global");
 var fetchParams = function (pageName) {
     if (pageName.includes(':')) {
         return "window.fetchParams = () => {\n            const pageName = '".concat(pageName, "'.split('/')\n            const currentPage = window.location.pathname.split('/');\n            const params = {};\n            const searchParams = new URLSearchParams(window.location.search);\n            for(let [key, value] of searchParams.entries()) {\n                params[key] = value;\n            }\n            for(let i = 0; i < pageName.length; i++) {\n                if(pageName[i].includes(':')) {\n                    params[pageName[i].replace(':', '')] = currentPage[i + 1]\n                }\n            }\n            return params;\n          }");
@@ -80,10 +81,10 @@ function generateClientBundle(_a) {
             switch (_d.label) {
                 case 0:
                     _d.trys.push([0, 2, , 3]);
-                    return [4 /*yield*/, (0, esbuild_1.build)(__assign(__assign({}, bundleConstants), { bundle: true, minify: true, treeShaking: true, write: false, stdin: {
+                    return [4 /*yield*/, (0, esbuild_1.build)(__assign(__assign(__assign({}, bundleConstants), { bundle: true, minify: true, treeShaking: true, write: false, stdin: {
                                 contents: getHydrationScript(filePath, pageName),
                                 resolveDir: process.cwd(),
-                            }, plugins: [(0, esbuild_plugin_gzip_1.default)({ gzip: true })], target: "esnext", outfile: (0, path_1.join)(".ssr/output/static", "".concat(pageName, ".bundle.js")) }))];
+                            }, plugins: [(0, esbuild_plugin_gzip_1.default)({ gzip: true })], target: "esnext", outfile: (0, path_1.join)(".ssr/output/static", "".concat(pageName, ".bundle.js")) }), global_1.watchOnDev))];
                 case 1: return [2 /*return*/, _d.sent()];
                 case 2:
                     e_1 = _d.sent();

@@ -73,13 +73,17 @@ require("./polyfills/index");
 var preact_1 = require("preact");
 var transpilor_1 = require("./runtime/transpilor");
 var page_1 = require("./utils/page");
-function server() {
+var uwsToken;
+var requireCaches = new Set();
+// TODO: Convert renders to abstracted classes
+function server(env) {
     var _this = this;
+    if (env === void 0) { env = "production"; }
     (0, register_1.default)({
         presets: ["preact", "@babel/preset-env"],
+        extensions: [".js", ".jsx", ".ts", ".tsx"],
         cache: true,
         compact: true,
-        extensions: [".js", ".jsx", ".ts", ".tsx"],
     });
     var _require = require;
     /* Helper function converting Node.js buffer to ArrayBuffer */
@@ -168,6 +172,7 @@ function server() {
         }
         else {
             var filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "server", "data", "".concat(pageName, ".data.js"));
+            requireCaches.add(filePath);
             var result = _require(filePath);
             cachedDataPages.set(pageName, result);
             return result;
@@ -297,15 +302,9 @@ function server() {
     }
     var apiModulesCache = new Map();
     var getModuleFromPage = function (pageName) {
-        if (apiModulesCache.has(pageName)) {
-            return apiModulesCache.get(pageName);
-        }
-        else {
-            var filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "server", "".concat(pageName, ".js"));
-            var result = _require(filePath);
-            apiModulesCache.set(pageName, result);
-            return result;
-        }
+        var filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "server", "".concat(pageName, ".js"));
+        requireCaches.add(filePath);
+        return _require(filePath);
     };
     var addParam = function (map, key, value, i) {
         if (i === void 0) { i = 0; }
@@ -329,22 +328,31 @@ function server() {
     }
     var cacheAPIMethods = new Map();
     var getAPIMethod = function (pageName, methodName) {
-        var key = "".concat(pageName, ".").concat(methodName);
-        if (cacheAPIMethods.has(key)) {
-            return cacheAPIMethods.get(key);
-        }
-        else {
+        if (env === "dev") {
             var api = getModuleFromPage(pageName);
             var result = api[methodName];
             if (!result)
                 return undefined;
-            cacheAPIMethods.set(key, result);
             return result;
+        }
+        else {
+            var key = "".concat(pageName, ".").concat(methodName);
+            if (cacheAPIMethods.has(key)) {
+                return cacheAPIMethods.get(key);
+            }
+            else {
+                var api = getModuleFromPage(pageName);
+                var result = api[methodName];
+                if (!result)
+                    return undefined;
+                cacheAPIMethods.set(key, result);
+                return result;
+            }
         }
     };
     function renderAPI(res, req, pageName) {
         return __awaiter(this, void 0, void 0, function () {
-            var method, api, body, params, dataCall, data, _a, e_2;
+            var method, api, body, params, headers_1, dataCall, data, _a, e_2;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
@@ -370,10 +378,15 @@ function server() {
                         _b.label = 2;
                     case 2:
                         params = pageName.includes(":") ? getParams(req, pageName) : undefined;
+                        headers_1 = new Map();
+                        req.forEach(function (key, value) {
+                            headers_1.set(key, value);
+                        });
                         dataCall = api({
                             url: pageName,
                             body: body,
                             params: params ? Object.fromEntries(params) : undefined,
+                            headers: headers_1,
                         });
                         if (!dataCall.then) return [3 /*break*/, 4];
                         return [4 /*yield*/, dataCall];
@@ -410,7 +423,7 @@ function server() {
             });
         });
     }
-    function caching(res) {
+    function cachingBundles(res) {
         res.writeHeader("Cache-Control", "public, max-age=31536000");
         res.writeHeader("Expires", new Date(Date.now() + 31536000000).toUTCString());
         res.writeHeader("Vary", "Accept-Encoding");
@@ -541,6 +554,7 @@ function server() {
             files.forEach(function (file) { return __awaiter(_this, void 0, void 0, function () {
                 var object, fileName, pageName;
                 return __generator(this, function (_a) {
+                    requireCaches.add(file);
                     object = _require(file).default;
                     fileName = file.split("/server/ws/");
                     pageName = fileName[1].split(".ws.js")[0];
@@ -610,8 +624,8 @@ function server() {
         ['Cache-Control', 'no-cache']
     ];
     function sendHeaders(res) {
-        for (var _i = 0, headers_1 = headers; _i < headers_1.length; _i++) {
-            var _a = headers_1[_i], header = _a[0], value = _a[1];
+        for (var _i = 0, headers_2 = headers; _i < headers_2.length; _i++) {
+            var _a = headers_2[_i], header = _a[0], value = _a[1];
             res.writeHeader(header, value);
         }
     }
@@ -700,7 +714,8 @@ function server() {
         else if (isApi || !isPage) {
             app.any(pageName, function (res, req) {
                 var path = req.getUrl();
-                if (path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".map") || path.endsWith(".html")) {
+                var isStaticFile = (0, fs_1.existsSync)((0, path_1.join)(process.cwd(), ".ssr", "output", "static", path));
+                if (isStaticFile) {
                     return render(res, req);
                 }
                 else {
@@ -722,22 +737,21 @@ function server() {
             });
         }
         else {
-            app.any(pageName, function (res, req) { return __awaiter(_this, void 0, void 0, function () {
-                var path, exts;
-                return __generator(this, function (_a) {
-                    path = req.getUrl();
-                    exts = path.split(".");
-                    if (exts.length > 1) {
-                        return [2 /*return*/, renderStatic(res, exts, path)];
-                    }
-                    else {
-                        return [2 /*return*/, render(res, req, pageServerName)];
-                    }
-                    return [2 /*return*/];
-                });
-            }); });
+            app.any(pageName, function (res, req) {
+                var path = req.getUrl();
+                var exts = path.split(".");
+                if (exts.length > 1) {
+                    return renderStatic(res, exts, path);
+                }
+                else {
+                    return render(res, req, pageServerName);
+                }
+            });
         }
         app.get("".concat(pageServerName, ".bundle.js"), function (res, req) {
+            if (env === "production") {
+                cachingBundles(res);
+            }
             var path = req.getUrl();
             var exts = path.split(".");
             return renderStatic(res, exts, path);
@@ -801,11 +815,22 @@ function server() {
     });
     app.listen(3000, function (token) {
         if (token) {
+            uwsToken = token;
             console.log("Listening to port 3000");
         }
         else {
             console.log("Failed to listen to port 3000");
         }
     });
+    return function () {
+        if (uwsToken) {
+            console.log('Shutting down now');
+            uws.us_listen_socket_close(uwsToken);
+            requireCaches.forEach(function (cache) {
+                delete require.cache[cache];
+            });
+            uwsToken = null;
+        }
+    };
 }
 exports.default = server;
