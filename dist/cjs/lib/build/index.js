@@ -69,6 +69,15 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -91,6 +100,7 @@ var create_server_1 = require("./create-server");
 var create_ssr_1 = require("./create-ssr");
 var esbuild_1 = require("esbuild");
 var module_from_string_1 = require("module-from-string");
+var global_1 = require("../utils/global");
 var buildReport = {};
 function generateFrameworkJSBundle() {
     console.log("🕧 Building framework bundle");
@@ -132,6 +142,8 @@ var buildComponent = function (Component, page, pageName, outdir, outWSdir) { re
         return [2 /*return*/];
     });
 }); };
+var tsConfigFile = (0, path_1.join)(process.cwd(), "tsconfig.json");
+var isTsConfigFileExists = (0, fs_1.existsSync)(tsConfigFile);
 var tsxTransformOptions = {
     loader: 'tsx',
     target: 'es2015',
@@ -144,13 +156,16 @@ var tsxTransformOptions = {
 };
 function buildClient() {
     return __awaiter(this, void 0, void 0, function () {
-        var pages, ssrdir, outdir_1, outWSdir_1, error_1;
+        var pages, ssrdir, pkg_1, outdir_1, outWSdir_1, error_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    _a.trys.push([0, 2, , 3]);
+                    _a.trys.push([0, 3, , 4]);
                     pages = (0, page_1.getPages)((0, path_1.join)(process.cwd(), "src"), path_1.join);
                     ssrdir = (0, path_1.join)(".ssr");
+                    return [4 /*yield*/, (0, global_1.getProjectPkg)()];
+                case 1:
+                    pkg_1 = _a.sent();
                     if ((0, fs_1.existsSync)(ssrdir))
                         (0, fs_1.rmSync)(ssrdir, { recursive: true });
                     outdir_1 = (0, path_1.join)(ssrdir, "output/static");
@@ -172,29 +187,39 @@ function buildClient() {
                                 return (0, create_server_1.generateServerScript)({ comp: page, outdir: outWSdir_1, pageName: pageName });
                             }
                             else if (page.endsWith(".tsx")) {
-                                // @ts-ignore
-                                return (0, esbuild_1.transform)((0, fs_1.readFileSync)(page).toString(), tsxTransformOptions).then(function (result) {
-                                    var code = result.code;
+                                var result = (0, esbuild_1.buildSync)({
+                                    loader: { ".tsx": "tsx", ".ts": "ts" },
+                                    bundle: true,
+                                    external: __spreadArray(__spreadArray([], Object.keys(pkg_1.dependencies || {}), true), Object.keys(pkg_1.peerDependencies || {}), true),
+                                    tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
+                                    entryPoints: [page],
+                                    write: false,
+                                    format: "esm",
+                                    outdir: "out"
+                                });
+                                var code = (result.outputFiles)[0].text;
+                                var Component = (0, module_from_string_1.importFromStringSync)(code, {
                                     // @ts-ignore
-                                    var Component = (0, module_from_string_1.importFromStringSync)(code, __assign(__assign({}, tsxTransformOptions), { filename: page }));
-                                    return buildComponent(Component, page, pageName, outdir_1, outWSdir_1);
-                                }).catch(function (e) { return console.error(e); });
+                                    transformOptions: __assign({}, tsxTransformOptions),
+                                    filename: page
+                                });
+                                return buildComponent(Component, page, pageName, outdir_1, outWSdir_1);
                             }
                             // @ts-ignore
                             return (_a = page, Promise.resolve().then(function () { return __importStar(require(_a)); })).then(function (Component) {
                                 return buildComponent(Component, page, pageName, outdir_1, outWSdir_1);
                             }).catch(function (err) { return console.error(err); });
                         }))];
-                case 1:
+                case 2:
                     // clear outdir
                     _a.sent();
                     generateFrameworkJSBundle();
-                    return [3 /*break*/, 3];
-                case 2:
+                    return [3 /*break*/, 4];
+                case 3:
                     error_1 = _a.sent();
-                    console.error(error_1);
-                    return [3 /*break*/, 3];
-                case 3: return [2 /*return*/];
+                    console.error({ e: error_1 });
+                    return [3 /*break*/, 4];
+                case 4: return [2 /*return*/];
             }
         });
     });

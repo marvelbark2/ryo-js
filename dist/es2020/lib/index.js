@@ -20,6 +20,7 @@ export default function server(env = "production") {
         compact: true,
     });
     const _require = require;
+    const pwd = process.cwd();
     /* Helper function converting Node.js buffer to ArrayBuffer */
     function toArrayBuffer(buffer) {
         return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
@@ -86,7 +87,7 @@ export default function server(env = "production") {
         });
     }
     const app = uws.App();
-    const buildReport = _require(join(process.cwd(), ".ssr", "build-report.json"));
+    const buildReport = _require(join(pwd, ".ssr", "build-report.json"));
     const mimeType = {
         "js": "text/javascript",
         "css": "text/css",
@@ -105,7 +106,7 @@ export default function server(env = "production") {
             return cachedDataPages.get(pageName);
         }
         else {
-            const filePath = join(process.cwd(), ".ssr", "output", "server", "data", `${pageName}.data.js`);
+            const filePath = join(pwd, ".ssr", "output", "server", "data", `${pageName}.data.js`);
             requireCaches.add(filePath);
             const result = _require(filePath);
             cachedDataPages.set(pageName, result);
@@ -217,7 +218,7 @@ export default function server(env = "production") {
     }
     const apiModulesCache = new Map();
     const getModuleFromPage = (pageName) => {
-        const filePath = join(process.cwd(), ".ssr", "output", "server", `${pageName}.js`);
+        const filePath = join(pwd, ".ssr", "output", "server", `${pageName}.js`);
         requireCaches.add(filePath);
         return _require(filePath);
     };
@@ -295,7 +296,7 @@ export default function server(env = "production") {
                     headers,
                 });
                 const data = dataCall.then ? await dataCall : dataCall;
-                if (Object.keys(data).includes("stream")) {
+                if (data.stream) {
                     if (!data.length) {
                         render404(res);
                         console.log("Error reading stream");
@@ -349,7 +350,7 @@ export default function server(env = "production") {
                     cachedBundles.set(path, cachedStream.pipe(new PassThrough()));
                     return pipeStreamOverResponse(res, cachedStream, cachedStream.bytesRead);
                 }
-                const filePath = join(process.cwd(), ".ssr", "output", "static", `${path}${ext === 'js' ? '.gz' : ''}`);
+                const filePath = join(pwd, ".ssr", "output", "static", `${path}${ext === 'js' ? '.gz' : ''}`);
                 const stream = createReadStream(filePath);
                 const size = stream.bytesRead;
                 if (isBundle) {
@@ -395,7 +396,7 @@ export default function server(env = "production") {
                     }
                     const fileExists = isStatic.get(pageName);
                     if (fileExists) {
-                        const filePath = join(process.cwd(), ".ssr", "output", "static", `${pageName}.html`);
+                        const filePath = join(pwd, ".ssr", "output", "static", `${pageName}.html`);
                         const stream = createReadStream(filePath);
                         const size = stream.bytesRead;
                         return pipeStreamOverResponse(res, stream, size);
@@ -426,7 +427,7 @@ export default function server(env = "production") {
         }
     }
     function loadWSEndpoints() {
-        const wsPath = join(process.cwd(), ".ssr", "output", "server", "ws");
+        const wsPath = join(pwd, ".ssr", "output", "server", "ws");
         const isExist = existsSync(wsPath);
         if (isExist) {
             const files = getPages(wsPath, join);
@@ -457,7 +458,7 @@ export default function server(env = "production") {
         });
         generateClientBundle;
         try {
-            const componentPath = join(process.cwd(), ".ssr", "output", "server", "pages", path + ".js");
+            const componentPath = join(pwd, ".ssr", "output", "server", "pages", path + ".js");
             const component = _require(componentPath);
             /** TODO: Algo to render server component */
             /**
@@ -565,7 +566,7 @@ export default function server(env = "production") {
         return 0;
     })
         .forEach((pageServerName) => {
-        const filePath = join(process.cwd(), ".ssr", "output", "static", `${pageServerName}.html`);
+        const filePath = join(pwd, ".ssr", "output", "static", `${pageServerName}.html`);
         const pageName = pageServerName.replace("/index", "/");
         const isPage = existsSync(filePath);
         const isServer = buildReport[pageServerName] === 'server';
@@ -585,7 +586,7 @@ export default function server(env = "production") {
         else if (isApi || !isPage) {
             app.any(pageName, (res, req) => {
                 const path = req.getUrl();
-                const isStaticFile = existsSync(join(process.cwd(), ".ssr", "output", "static", path));
+                const isStaticFile = existsSync(join(pwd, ".ssr", "output", "static", path));
                 if (isStaticFile) {
                     return render(res, req);
                 }

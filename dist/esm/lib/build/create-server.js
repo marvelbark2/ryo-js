@@ -57,20 +57,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
 import { join } from "path";
 import { build } from "esbuild";
 import { existsSync } from "fs";
-import { watchOnDev } from "../utils/global";
-export function getProjectPkg() {
-    return __awaiter(this, void 0, void 0, function () {
-        var pkg;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0: return [4 /*yield*/, import(join(process.cwd(), "package.json"))];
-                case 1:
-                    pkg = _a.sent();
-                    return [2 /*return*/, pkg];
-            }
-        });
-    });
-}
+import { watchOnDev, getProjectPkg } from "../utils/global";
 export function generateServerScript(_a) {
     var comp = _a.comp, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/data/" : _b, pageName = _a.pageName, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
         treeShaking: true,
@@ -88,7 +75,7 @@ export function generateServerScript(_a) {
                     return [4 /*yield*/, getProjectPkg()];
                 case 1:
                     pkg = _d.sent();
-                    return [2 /*return*/, build(__assign(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", platform: "node", outfile: out, tsconfig: existsSync(tsConfig) ? tsConfig : undefined, allowOverwrite: false, external: __spreadArray(__spreadArray([], Object.keys(pkg.dependencies || {}), true), Object.keys(pkg.peerDependencies || {}), true) }), watchOnDev)).then(function (result) {
+                    return [2 /*return*/, build(__assign(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", platform: "node", outfile: out, tsconfig: existsSync(tsConfig) ? tsConfig : undefined, allowOverwrite: true, external: __spreadArray(__spreadArray([], Object.keys(pkg.dependencies || {}), true), Object.keys(pkg.peerDependencies || {}), true) }), watchOnDev)).then(function (result) {
                             if (result.errors.length > 0) {
                                 console.error(result.errors);
                             }

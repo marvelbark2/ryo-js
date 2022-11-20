@@ -1,11 +1,7 @@
 import { join } from "path";
 import { build } from "esbuild";
 import { existsSync } from "fs";
-import { watchOnDev } from "../utils/global";
-export async function getProjectPkg() {
-    const pkg = await import(join(process.cwd(), "package.json"));
-    return pkg;
-}
+import { watchOnDev, getProjectPkg } from "../utils/global";
 export async function generateServerScript({ comp, outdir = ".ssr/output/data/", pageName, bundleConstants = {
     treeShaking: true,
     minify: true,
@@ -24,7 +20,7 @@ export async function generateServerScript({ comp, outdir = ".ssr/output/data/",
         platform: "node",
         outfile: out,
         tsconfig: existsSync(tsConfig) ? tsConfig : undefined,
-        allowOverwrite: false,
+        allowOverwrite: true,
         external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {})],
         ...watchOnDev,
     }).then((result) => {

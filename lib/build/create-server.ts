@@ -1,12 +1,8 @@
 import { join } from "path";
 import { build } from "esbuild";
 import { existsSync } from "fs";
-import { watchOnDev } from "../utils/global";
+import { watchOnDev, getProjectPkg } from "../utils/global";
 
-export async function getProjectPkg() {
-    const pkg = await import(join(process.cwd(), "package.json"));
-    return pkg;
-}
 
 export async function generateServerScript({
     comp,
@@ -21,6 +17,7 @@ export async function generateServerScript({
     const isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
     const out = join(outdir, isWS ? "ws" : ".", `${pageName}.js`)
     const tsConfig = join(process.cwd(), "tsconfig.json");
+
     const pkg = await getProjectPkg();
     return build({
         ...bundleConstants,
@@ -31,7 +28,7 @@ export async function generateServerScript({
         platform: "node",
         outfile: out,
         tsconfig: existsSync(tsConfig) ? tsConfig : undefined,
-        allowOverwrite: false,
+        allowOverwrite: true,
         external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {})],
         ...watchOnDev,
     }).then((result) => {

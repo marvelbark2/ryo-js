@@ -86,6 +86,7 @@ function server(env) {
         compact: true,
     });
     var _require = require;
+    var pwd = process.cwd();
     /* Helper function converting Node.js buffer to ArrayBuffer */
     function toArrayBuffer(buffer) {
         return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
@@ -152,7 +153,7 @@ function server(env) {
         });
     }
     var app = uws.App();
-    var buildReport = _require((0, path_1.join)(process.cwd(), ".ssr", "build-report.json"));
+    var buildReport = _require((0, path_1.join)(pwd, ".ssr", "build-report.json"));
     var mimeType = {
         "js": "text/javascript",
         "css": "text/css",
@@ -171,7 +172,7 @@ function server(env) {
             return cachedDataPages.get(pageName);
         }
         else {
-            var filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "server", "data", "".concat(pageName, ".data.js"));
+            var filePath = (0, path_1.join)(pwd, ".ssr", "output", "server", "data", "".concat(pageName, ".data.js"));
             requireCaches.add(filePath);
             var result = _require(filePath);
             cachedDataPages.set(pageName, result);
@@ -302,7 +303,7 @@ function server(env) {
     }
     var apiModulesCache = new Map();
     var getModuleFromPage = function (pageName) {
-        var filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "server", "".concat(pageName, ".js"));
+        var filePath = (0, path_1.join)(pwd, ".ssr", "output", "server", "".concat(pageName, ".js"));
         requireCaches.add(filePath);
         return _require(filePath);
     };
@@ -398,7 +399,7 @@ function server(env) {
                         _b.label = 5;
                     case 5:
                         data = _a;
-                        if (Object.keys(data).includes("stream")) {
+                        if (data.stream) {
                             if (!data.length) {
                                 render404(res);
                                 console.log("Error reading stream");
@@ -458,7 +459,7 @@ function server(env) {
                                     cachedBundles.set(path, cachedStream.pipe(new stream_1.PassThrough()));
                                     return [2 /*return*/, pipeStreamOverResponse(res, cachedStream, cachedStream.bytesRead)];
                                 }
-                                filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "static", "".concat(path).concat(ext === 'js' ? '.gz' : ''));
+                                filePath = (0, path_1.join)(pwd, ".ssr", "output", "static", "".concat(path).concat(ext === 'js' ? '.gz' : ''));
                                 stream = (0, fs_1.createReadStream)(filePath);
                                 size = stream.bytesRead;
                                 if (isBundle) {
@@ -513,7 +514,7 @@ function server(env) {
                         }
                         fileExists = isStatic.get(pageName);
                         if (!fileExists) return [3 /*break*/, 3];
-                        filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "static", "".concat(pageName, ".html"));
+                        filePath = (0, path_1.join)(pwd, ".ssr", "output", "static", "".concat(pageName, ".html"));
                         stream = (0, fs_1.createReadStream)(filePath);
                         size = stream.bytesRead;
                         return [2 /*return*/, pipeStreamOverResponse(res, stream, size)];
@@ -547,7 +548,7 @@ function server(env) {
     }
     function loadWSEndpoints() {
         var _this = this;
-        var wsPath = (0, path_1.join)(process.cwd(), ".ssr", "output", "server", "ws");
+        var wsPath = (0, path_1.join)(pwd, ".ssr", "output", "server", "ws");
         var isExist = (0, fs_1.existsSync)(wsPath);
         if (isExist) {
             var files = (0, page_1.getPages)(wsPath, path_1.join);
@@ -589,7 +590,7 @@ function server(env) {
                         _b.label = 1;
                     case 1:
                         _b.trys.push([1, 6, , 7]);
-                        componentPath = (0, path_1.join)(process.cwd(), ".ssr", "output", "server", "pages", path + ".js");
+                        componentPath = (0, path_1.join)(pwd, ".ssr", "output", "server", "pages", path + ".js");
                         component = _require(componentPath);
                         if (!(component.default.constructor.name === 'AsyncFunction')) return [3 /*break*/, 3];
                         return [4 /*yield*/, component.default()];
@@ -694,7 +695,7 @@ function server(env) {
         return 0;
     })
         .forEach(function (pageServerName) {
-        var filePath = (0, path_1.join)(process.cwd(), ".ssr", "output", "static", "".concat(pageServerName, ".html"));
+        var filePath = (0, path_1.join)(pwd, ".ssr", "output", "static", "".concat(pageServerName, ".html"));
         var pageName = pageServerName.replace("/index", "/");
         var isPage = (0, fs_1.existsSync)(filePath);
         var isServer = buildReport[pageServerName] === 'server';
@@ -714,7 +715,7 @@ function server(env) {
         else if (isApi || !isPage) {
             app.any(pageName, function (res, req) {
                 var path = req.getUrl();
-                var isStaticFile = (0, fs_1.existsSync)((0, path_1.join)(process.cwd(), ".ssr", "output", "static", path));
+                var isStaticFile = (0, fs_1.existsSync)((0, path_1.join)(pwd, ".ssr", "output", "static", path));
                 if (isStaticFile) {
                     return render(res, req);
                 }

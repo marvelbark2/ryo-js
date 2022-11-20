@@ -7,15 +7,16 @@ const reg = () => register({
 import { h, Fragment } from "preact";
 Object.defineProperty(global, 'h', h);
 Object.defineProperty(global, 'Fragment', Fragment);
-import { rmSync, existsSync, readFileSync, createReadStream, createWriteStream } from "fs";
+import { rmSync, existsSync, createReadStream, createWriteStream } from "fs";
 import { join } from "path";
 import { getPageName, getPages } from '../utils/page';
 import { generateFramework } from "./create-framework";
 import { createStaticFile } from "./create-static";
 import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
-import { transform } from "esbuild";
+import { buildSync } from "esbuild";
 import { importFromStringSync } from "module-from-string";
+import { getProjectPkg } from "../utils/global";
 const buildReport = {};
 function generateFrameworkJSBundle() {
     console.log("🕧 Building framework bundle");
@@ -53,6 +54,8 @@ const buildComponent = async (Component, page, pageName, outdir, outWSdir) => {
         return generateServerScript({ comp: page, outdir: outWSdir, pageName });
     }
 };
+const tsConfigFile = join(process.cwd(), "tsconfig.json");
+const isTsConfigFileExists = existsSync(tsConfigFile);
 const tsxTransformOptions = {
     loader: 'tsx',
     target: 'es2015',
@@ -67,6 +70,7 @@ async function buildClient() {
     try {
         const pages = getPages(join(process.cwd(), "src"), join);
         const ssrdir = join(".ssr");
+        const pkg = await getProjectPkg();
         if (existsSync(ssrdir))
             rmSync(ssrdir, { recursive: true });
         const outdir = join(ssrdir, "output/static");
@@ -87,16 +91,25 @@ async function buildClient() {
                 return generateServerScript({ comp: page, outdir: outWSdir, pageName });
             }
             else if (page.endsWith(".tsx")) {
-                // @ts-ignore
-                return transform(readFileSync(page).toString(), tsxTransformOptions).then((result) => {
-                    const code = result.code;
+                const result = buildSync({
+                    loader: { ".tsx": "tsx", ".ts": "ts" },
+                    bundle: true,
+                    external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {})],
+                    tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
+                    entryPoints: [page],
+                    write: false,
+                    format: "esm",
+                    outdir: "out"
+                });
+                const code = (result.outputFiles)[0].text;
+                const Component = importFromStringSync(code, {
                     // @ts-ignore
-                    const Component = importFromStringSync(code, {
+                    transformOptions: {
                         ...tsxTransformOptions,
-                        filename: page
-                    });
-                    return buildComponent(Component, page, pageName, outdir, outWSdir);
-                }).catch(e => console.error(e));
+                    },
+                    filename: page
+                });
+                return buildComponent(Component, page, pageName, outdir, outWSdir);
             }
             // @ts-ignore
             return import(page).then((Component) => {
@@ -106,7 +119,7 @@ async function buildClient() {
         generateFrameworkJSBundle();
     }
     catch (error) {
-        console.error(error);
+        console.error({ e: error });
     }
 }
 function copyPublicFiles() {

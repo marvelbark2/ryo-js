@@ -1,3 +1,4 @@
+import { join } from "path";
 import ps from "./pubsub";
 
 export const watchOnDev = {
@@ -10,4 +11,10 @@ export const watchOnDev = {
             }
         }
     } : undefined
+}
+
+
+export async function getProjectPkg() {
+    const pkg = await import(join(process.cwd(), "package.json"));
+    return pkg;
 }
