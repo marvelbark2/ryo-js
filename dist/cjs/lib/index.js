@@ -352,51 +352,74 @@ function server(env) {
     };
     function renderAPI(res, req, pageName) {
         return __awaiter(this, void 0, void 0, function () {
-            var method, api, body, params, headers_1, dataCall, data, _a, e_2;
+            var method_1, api, dataCall, data, _a, e_2;
+            var _this = this;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
-                        _b.trys.push([0, 8, , 9]);
+                        _b.trys.push([0, 6, , 7]);
                         res.onAborted(function () {
                             res.aborted = true;
                         });
-                        method = req.getMethod();
-                        api = getAPIMethod(pageName, method);
-                        if (!api) return [3 /*break*/, 6];
-                        body = {};
-                        if (!(method !== "get")) return [3 /*break*/, 2];
-                        return [4 /*yield*/, new Promise(function (resolve, reject) {
-                                readJson(res, function (obj) {
-                                    resolve(obj);
-                                }, function () {
-                                    /* Request was prematurely aborted or invalid or missing, stop reading */
-                                    reject('Invalid JSON or no data at all!');
-                                });
-                            })];
-                    case 1:
-                        body = _b.sent();
-                        _b.label = 2;
-                    case 2:
-                        params = pageName.includes(":") ? getParams(req, pageName) : undefined;
-                        headers_1 = new Map();
-                        req.forEach(function (key, value) {
-                            headers_1.set(key, value);
-                        });
+                        method_1 = req.getMethod();
+                        api = getAPIMethod(pageName, method_1);
+                        if (!api) return [3 /*break*/, 4];
                         dataCall = api({
                             url: pageName,
-                            body: body,
-                            params: params ? Object.fromEntries(params) : undefined,
-                            headers: headers_1,
+                            body: function () { return __awaiter(_this, void 0, void 0, function () {
+                                return __generator(this, function (_a) {
+                                    switch (_a.label) {
+                                        case 0:
+                                            if (!(method_1 !== "get")) return [3 /*break*/, 2];
+                                            return [4 /*yield*/, new Promise(function (resolve, reject) {
+                                                    readJson(res, function (obj) {
+                                                        resolve(obj);
+                                                    }, function () {
+                                                        /* Request was prematurely aborted or invalid or missing, stop reading */
+                                                        reject('Invalid JSON or no data at all!');
+                                                    });
+                                                })];
+                                        case 1: return [2 /*return*/, _a.sent()];
+                                        case 2: return [2 /*return*/];
+                                    }
+                                });
+                            }); },
+                            params: function () {
+                                var params = pageName.includes(":") ? getParams(req, pageName) : undefined;
+                                return params ? Object.fromEntries(params) : undefined;
+                            },
+                            headers: function () {
+                                var headers = new Map();
+                                req.forEach(function (key, value) {
+                                    headers.set(key, value);
+                                });
+                                return headers;
+                            },
+                            setCookie: function (key, value, options) {
+                                if (options === void 0) { options = []; }
+                                if (options.length === 0) {
+                                    res.writeHeader("Set-Cookie", "".concat(key, "=").concat(value));
+                                }
+                                else {
+                                    res.writeHeader("Set-Cookie", "".concat(key, "=").concat(value, ";").concat(options.map(function (x) { return "".concat(x[0], "=").concat(x[1]); }).join(";")));
+                                }
+                            },
+                            writeHeader: function (key, value) {
+                                res.writeHeader(key, value);
+                            },
+                            status: function (code) {
+                                res.writeStatus(code.toString());
+                            }
                         });
-                        if (!dataCall.then) return [3 /*break*/, 4];
+                        if (!dataCall.then) return [3 /*break*/, 2];
                         return [4 /*yield*/, dataCall];
-                    case 3:
+                    case 1:
                         _a = _b.sent();
-                        return [3 /*break*/, 5];
-                    case 4:
+                        return [3 /*break*/, 3];
+                    case 2:
                         _a = dataCall;
-                        _b.label = 5;
-                    case 5:
+                        _b.label = 3;
+                    case 3:
                         data = _a;
                         if (data.stream) {
                             if (!data.length) {
@@ -410,15 +433,15 @@ function server(env) {
                             res.writeHeader("Content-Type", "application/json");
                             return [2 /*return*/, res.end(JSON.stringify(data))];
                         }
-                        return [3 /*break*/, 7];
-                    case 6: return [2 /*return*/, render404(res)];
-                    case 7: return [3 /*break*/, 9];
-                    case 8:
+                        return [3 /*break*/, 5];
+                    case 4: return [2 /*return*/, render404(res)];
+                    case 5: return [3 /*break*/, 7];
+                    case 6:
                         e_2 = _b.sent();
                         console.error(e_2);
                         render404(res);
-                        return [3 /*break*/, 9];
-                    case 9: return [2 /*return*/];
+                        return [3 /*break*/, 7];
+                    case 7: return [2 /*return*/];
                 }
             });
         });
@@ -624,8 +647,8 @@ function server(env) {
         ['Cache-Control', 'no-cache']
     ];
     function sendHeaders(res) {
-        for (var _i = 0, headers_2 = headers; _i < headers_2.length; _i++) {
-            var _a = headers_2[_i], header = _a[0], value = _a[1];
+        for (var _i = 0, headers_1 = headers; _i < headers_1.length; _i++) {
+            var _a = headers_1[_i], header = _a[0], value = _a[1];
             res.writeHeader(header, value);
         }
     }

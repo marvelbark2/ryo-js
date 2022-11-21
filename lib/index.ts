@@ -299,28 +299,44 @@ export default function server(env = "production") {
             const method = req.getMethod();
             const api = getAPIMethod(pageName, method);
             if (api) {
-                let body = {};
-                if (method !== "get") {
-                    body = await new Promise((resolve, reject) => {
-                        readJson(res, (obj: Buffer | string) => {
-                            resolve(obj);
-                        }, () => {
-                            /* Request was prematurely aborted or invalid or missing, stop reading */
-                            reject('Invalid JSON or no data at all!');
-                        })
-                    })
-                }
-
-                const params = pageName.includes(":") ? getParams(req, pageName) : undefined;
-                const headers = new Map();
-                req.forEach((key, value) => {
-                    headers.set(key, value);
-                });
                 const dataCall = api({
                     url: pageName,
-                    body: body,
-                    params: params ? Object.fromEntries(params) : undefined,
-                    headers,
+                    body: async () => {
+                        if (method !== "get") {
+                            return await new Promise((resolve, reject) => {
+                                readJson(res, (obj: Buffer | string) => {
+                                    resolve(obj);
+                                }, () => {
+                                    /* Request was prematurely aborted or invalid or missing, stop reading */
+                                    reject('Invalid JSON or no data at all!');
+                                })
+                            })
+                        }
+                    },
+                    params: () => {
+                        const params = pageName.includes(":") ? getParams(req, pageName) : undefined;
+                        return params ? Object.fromEntries(params) : undefined
+                    },
+                    headers: () => {
+                        const headers = new Map();
+                        req.forEach((key, value) => {
+                            headers.set(key, value);
+                        });
+                        return headers;
+                    },
+                    setCookie: (key: string, value: string, options: string[][] = []) => {
+                        if (options.length === 0) {
+                            res.writeHeader("Set-Cookie", `${key}=${value}`);
+                        } else {
+                            res.writeHeader("Set-Cookie", `${key}=${value};${options.map(x => `${x[0]}=${x[1]}`).join(";")}`);
+                        }
+                    },
+                    writeHeader: (key: string, value: string) => {
+                        res.writeHeader(key, value);
+                    },
+                    status: (code: number) => {
+                        res.writeStatus(code.toString());
+                    }
 
                 });
                 const data = dataCall.then ? await dataCall : dataCall;
@@ -495,17 +511,6 @@ export default function server(env = "production") {
         try {
             const componentPath = join(pwd, ".ssr", "output", "server", "pages", path + ".js");
             const component = _require(componentPath);
-
-            /** TODO: Algo to render server component */
-
-            /**
-             * 1. Render the component with the data from the server
-             * 2. Send the rendered component to the client
-             * 3. Extract the html from the rendered component
-             * 4. Add client bundle
-             * 5. use the html to render the page
-             * THUS: the page will be rendered with the data from the server as html and use hooks externally to hydrate the page
-             */
             const defaultComponent = component.default.constructor.name === 'AsyncFunction' ? await component.default() : component.default();
             const Element = createElement(() => defaultComponent, null);
             res.writeHeader("Content-Type", "text/html");
@@ -515,30 +520,6 @@ export default function server(env = "production") {
 
             const finalHtml = html.replace("</body>", `<script>${clientBundle}</script></body>`);
             return res.end(finalHtml);
-
-            // const bundled = await generateClientBundle({ Element: component.default, data: serverCall, filePath: componentPath });
-            // const code = bundled["outputFiles"][0]["text"];
-            // ${preactRender(Element)}
-            // const HTML = preactRender(Element);
-            // const hydrateScript = `
-            // <!DOCTYPE html>
-            // <head>
-            //   <meta charset="UTF-8">
-            //   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            //   <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-            //   <noscript><link rel="stylesheet" href="styles.css"></noscript>   
-            //   <script src="/framework-system.js"></script>       
-            // </head>
-            // <body>
-            //   <div id="root">${HTML}</div>
-            //   <script>
-            //     var _react = window.framework.PREACT._react;
-            //     let h = window.framework.PREACT.h
-            //     _react.hydrate(_react.createElement(${component.default.toString()}, {data: ${JSON.stringify(serverCall)}}),document.getElementById("root"));
-            //   </script>
-            // </body>
-            // `;
-            //return res.end(hydrateScript);
         } catch (e) {
             console.error(e);
         }

@@ -205,7 +205,6 @@ function buildClient() {
                                         transformOptions: __assign({}, tsxTransformOptions),
                                         filename: page
                                     });
-                                    console.log({ Component: Component });
                                     return [4 /*yield*/, buildComponent(Component, page, pageName, outdir_1, outWSdir_1)];
                                 case 3: return [2 /*return*/, _a.sent()];
                                 case 4: return [4 /*yield*/, (_b = page, Promise.resolve().then(function () { return __importStar(require(_b)); }))];
