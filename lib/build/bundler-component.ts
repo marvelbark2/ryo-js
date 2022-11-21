@@ -33,10 +33,23 @@ const fetchParams = (pageName: string) => {
       }`;
 }
 const getHydrationScript = (filePath: string, pageName: string) => `
-  import {hydrate, createElement} from "preact"
-  import Component from "${filePath}";
+  import {hydrate, createElement, h} from "preact"
+  import * as Module from "${filePath}";
+
+  const Component = Module.default || Module;
+  const Parent = Module.Parent;
+
+  document.getElementById("${pageName}").innerHTML = "";
+
   if(window.getData) {
-    hydrate(createElement(Component, {data: JSON.parse(window.getData())}), document.getElementById("root"))
+    const Element = createElement(Component, {data: JSON.parse(window.getData())});
+    const W = h("span", {id: "${pageName}"}, Element);
+    if(Parent) {
+        const ParentElement = createElement(Parent, {}, W);
+        hydrate(ParentElement, document.getElementById("root"))
+    } else {
+        hydrate(W, document.getElementById("${pageName}"))
+    }
 
     const ws = new WebSocket('ws://'+ window.location.host + '/${pageName}.data')
   
@@ -44,12 +57,17 @@ const getHydrationScript = (filePath: string, pageName: string) => `
       ws.onmessage = (e) => {
           const data = JSON.parse(e.data)
           if(data.type === 'change') {
-              hydrate(createElement(Component, {data: data.payload}), document.getElementById("root"))
+              const newElement = createElement(Component, {data: data.payload})
+              const NW = h("span", {id: "${pageName}"}, newElement);
+              document.getElementById("${pageName}").innerHTML = "";
+              hydrate(NW, document.getElementById("${pageName}"))
           }
       }
     }
   } else {
-    hydrate(createElement(Component), document.getElementById("root"))
+    const Element = createElement(Component)
+    const ParentElement = createElement(Parent, {id: '${pageName}'}, Element);
+    hydrate(ParentElement, document.getElementById('${pageName}'))
   }
 
   ${fetchParams(pageName)}
@@ -64,13 +82,12 @@ export async function generateClientBundle({
         allowOverwrite: true,
         treeShaking: true,
         minify: true,
-
         inject: [join(__dirname, `preact-shim.js`)],
-
         loader: { ".ts": "ts", ".tsx": "tsx", ".js": "jsx", ".jsx": "jsx" },
         jsx: "automatic",
         legalComments: "none",
-        write: false
+        platform: "browser",
+        write: false,
     }
 }: { filePath: string; outdir?: string; pageName: string; bundleConstants?: any }) {
     try {
@@ -79,7 +96,7 @@ export async function generateClientBundle({
             bundle: true,
             minify: true,
             treeShaking: true,
-            write: false,
+            jsxImportSource: "preact",
             stdin: {
                 contents: getHydrationScript(filePath, pageName),
                 resolveDir: process.cwd(),

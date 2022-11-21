@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.4",
+  "version": "0.0.0-meme.9",
   "description": "Fullstack framework",
   "scripts": {
     "start": "node lib/index.module.js",
@@ -10,7 +10,12 @@
     "build:esm": "tsc --module es2020 --target es5 --outDir dist/esm",
     "build:cjs": "tsc --module commonjs --target es5 --outDir dist/cjs --isolatedModules true --declaration false"
   },
-  "keywords": ["preact", "framework-js", "ssg", "ssr"],
+  "keywords": [
+    "preact",
+    "framework-js",
+    "ssg",
+    "ssr"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marvelbark2/ryo-js"
@@ -26,7 +31,7 @@
     "@babel/plugin-transform-react-jsx": "^7.19.0",
     "@babel/preset-env": "^7.20.2",
     "@babel/register": "^7",
-    "esbuild": "^0.15.13",
+    "esbuild": "^0.15.14",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.15.0"
   },
   "devDependencies": {
@@ -38,7 +43,7 @@
     "@types/node-fetch": "^2.6.2",
     "babel-preset-es2015": "^6.24.1",
     "babel-preset-preact": "^2.0.0",
-    "esbuild": "^0.15.13",
+    "esbuild": "^0.15.14",
     "postcss": "^8.4.19",
     "tailwindcss": "^3.2.4",
     "typescript": "^4.9.3"
@@ -46,18 +51,17 @@
   "dependencies": {
     "@babel/core": "^7.20.2",
     "@babel/plugin-transform-react-jsx": "^7.19.0",
+    "@babel/preset-env": "^7.20.2",
     "@babel/register": "^7",
-    "@prisma/client": "^4.6.1",
     "flamethrower-router": "^0.0.0-meme.12",
     "module-from-string": "^3.3.0",
-    "node-fetch": "^2.6.7",
+    "node-fetch": "2.6.7",
     "postcss-cli": "^10.0.0",
-    "preact": "^10.11.2",
+    "preact": "^10.11.3",
     "preact-render-to-string": "^5.2.6",
     "react": "npm:@preact/compat",
     "react-dom": "npm:@preact/compat",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.15.0",
-    "@babel/preset-env": "^7.20.2"
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.15.0"
   },
   "files": [
     "dist/cjs"

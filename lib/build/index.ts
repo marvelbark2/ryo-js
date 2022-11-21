@@ -51,10 +51,10 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
         if (keys.includes("server")) {
             buildReport['/' + pageName] = "server";
             console.timeEnd("🕧 Building: " + pageName);
-            return generateSSRPages({ outdir: outWSdir, pageName, path: page });
+            return await generateSSRPages({ outdir: outWSdir, pageName, path: page });
         }
         console.timeEnd("🕧 Building: " + pageName);
-        return createStaticFile(Component, page, pageName, { outdir, bundle: true, data: keys.includes("data") });
+        return await createStaticFile(Component, page, pageName, { outdir, bundle: true, data: keys.includes("data") });
     } else {
         if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
             buildReport['/' + pageName] = "api";
@@ -64,22 +64,19 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
             buildReport['/' + pageName] = true;
         }
         console.timeEnd("🕧 Building: " + pageName);
-        return generateServerScript({ comp: page, outdir: outWSdir, pageName });
+        return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
     }
 }
 
 const tsConfigFile = join(process.cwd(), "tsconfig.json");
 const isTsConfigFileExists = existsSync(tsConfigFile);
 const tsxTransformOptions = {
-    loader: 'tsx',
-    target: 'es2015',
-    format: 'cjs',
-    jsxFactory: 'h',
-    jsxFragment: 'Fragment',
-    jsxImportSource: 'preact',
     minify: true,
-    jsx: 'automatic'
+    format: "esm",
+    target: "es2019",
 }
+console.log(isTsConfigFileExists ? tsConfigFile : undefined)
+
 async function buildClient() {
     try {
         const pages = getPages(join(process.cwd(), "src"), join);
@@ -92,58 +89,51 @@ async function buildClient() {
         const outdir = join(ssrdir, "output/static");
         const outWSdir = join(ssrdir, "output/server");
         reg();
-        // clear outdir
-        await Promise.allSettled(
-            pages
-                .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx"], page))
-                .map((page: string) => {
-                    if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx"], page)) {
-                        throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
-                    }
-                    const pageName = getPageName(page);
-                    console.time("🕧 Building: " + pageName);
-                    if (page.endsWith(".ts")) {
-                        buildReport['/' + pageName] = true;
-                        console.timeEnd("🕧 Building: " + pageName);
-                        return generateServerScript({ comp: page, outdir: outWSdir, pageName });
-                    } else if (page.endsWith(".tsx")) {
-                        const result = buildSync({
-                            loader: { ".tsx": "tsx", ".ts": "ts" },
-                            bundle: true,
-                            external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {})],
-                            tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
-                            entryPoints: [page],
-                            write: false,
-                            format: "esm",
-                            outdir: "out"
-                        });
-                        const code = (result.outputFiles!)[0].text;
 
+        const allBuilds = pages
+            .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx"], page))
+            .map(async (page: string) => {
+                if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx"], page)) {
+                    throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
+                }
+                const pageName = getPageName(page);
+                console.time("🕧 Building: " + pageName);
+                if (page.endsWith(".ts")) {
+                    buildReport['/' + pageName] = true;
+                    console.timeEnd("🕧 Building: " + pageName);
+                    return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
+                } else if (page.endsWith(".tsx")) {
+                    const result = buildSync({
+                        entryPoints: [page],
+                        bundle: true,
+                        tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
+                        external: ["preact", "react", ...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})],
+                        write: false,
+                        format: "cjs",
+                    });
+                    const code = result.outputFiles[0].text;
 
-                        const Component = importFromStringSync(code, {
-                            // @ts-ignore
-                            transformOptions: {
-                                ...tsxTransformOptions,
-                            },
-                            filename: page
-                        });
+                    const Component = importFromStringSync(code, {
+                        // @ts-ignore
+                        transformOptions: {
+                            ...tsxTransformOptions,
+                        },
+                        filename: page
+                    });
+                    return await buildComponent(Component, page, pageName, outdir, outWSdir);
+                } else {
+                    const Component_2 = await import(page);
+                    return await buildComponent(Component_2, page, pageName, outdir, outWSdir);
 
-                        return buildComponent(Component, page, pageName, outdir, outWSdir);
-                    }
-                    // @ts-ignore
-                    return import(page).then((Component) => {
-                        return buildComponent(Component, page, pageName, outdir, outWSdir);
-                    }).catch((err) => console.error(err));
+                }
+            });
 
-                })
-        )
+        await Promise.all(allBuilds);
 
         generateFrameworkJSBundle();
 
     } catch (error) {
         console.error({ e: error });
-
-
     }
 }
 
@@ -162,7 +152,11 @@ function copyPublicFiles() {
 
 
 export default async function build() {
-    await buildClient();
-    copyPublicFiles();
-    return buildReport;
+    try {
+        await buildClient();
+        copyPublicFiles();
+        return buildReport;
+    } catch (e) {
+        console.error(e);
+    }
 }

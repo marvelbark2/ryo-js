@@ -62,7 +62,7 @@ var fetchParams = function (pageName) {
     else
         return "\n    window.fetchParams = () => {\n        const currentPage = window.location.pathname;\n        const searchParams = new URLSearchParams(window.location.search);\n        const params = {};\n        for(let [key, value] of searchParams.entries()) {\n            params[key] = value;\n        }\n        return params;\n      }";
 };
-var getHydrationScript = function (filePath, pageName) { return "\n  import {hydrate, createElement} from \"preact\"\n  import Component from \"".concat(filePath, "\";\n  if(window.getData) {\n    hydrate(createElement(Component, {data: JSON.parse(window.getData())}), document.getElementById(\"root\"))\n\n    const ws = new WebSocket('ws://'+ window.location.host + '/").concat(pageName, ".data')\n  \n    ws.onopen = () => {\n      ws.onmessage = (e) => {\n          const data = JSON.parse(e.data)\n          if(data.type === 'change') {\n              hydrate(createElement(Component, {data: data.payload}), document.getElementById(\"root\"))\n          }\n      }\n    }\n  } else {\n    hydrate(createElement(Component), document.getElementById(\"root\"))\n  }\n\n  ").concat(fetchParams(pageName), "\n"); };
+var getHydrationScript = function (filePath, pageName) { return "\n  import {hydrate, createElement, h} from \"preact\"\n  import * as Module from \"".concat(filePath, "\";\n\n  const Component = Module.default || Module;\n  const Parent = Module.Parent;\n\n  document.getElementById(\"").concat(pageName, "\").innerHTML = \"\";\n\n  if(window.getData) {\n    const Element = createElement(Component, {data: JSON.parse(window.getData())});\n    const W = h(\"span\", {id: \"").concat(pageName, "\"}, Element);\n    if(Parent) {\n        const ParentElement = createElement(Parent, {}, W);\n        hydrate(ParentElement, document.getElementById(\"root\"))\n    } else {\n        hydrate(W, document.getElementById(\"").concat(pageName, "\"))\n    }\n\n    const ws = new WebSocket('ws://'+ window.location.host + '/").concat(pageName, ".data')\n  \n    ws.onopen = () => {\n      ws.onmessage = (e) => {\n          const data = JSON.parse(e.data)\n          if(data.type === 'change') {\n              const newElement = createElement(Component, {data: data.payload})\n              const NW = h(\"span\", {id: \"").concat(pageName, "\"}, newElement);\n              document.getElementById(\"").concat(pageName, "\").innerHTML = \"\";\n              hydrate(NW, document.getElementById(\"").concat(pageName, "\"))\n          }\n      }\n    }\n  } else {\n    const Element = createElement(Component)\n    const ParentElement = createElement(Parent, {id: '").concat(pageName, "'}, Element);\n    hydrate(ParentElement, document.getElementById('").concat(pageName, "'))\n  }\n\n  ").concat(fetchParams(pageName), "\n"); };
 function generateClientBundle(_a) {
     var filePath = _a.filePath, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/static/" : _b, pageName = _a.pageName, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
         bundle: true,
@@ -73,7 +73,8 @@ function generateClientBundle(_a) {
         loader: { ".ts": "ts", ".tsx": "tsx", ".js": "jsx", ".jsx": "jsx" },
         jsx: "automatic",
         legalComments: "none",
-        write: false
+        platform: "browser",
+        write: false,
     } : _c;
     return __awaiter(this, void 0, void 0, function () {
         var e_1;
@@ -81,7 +82,7 @@ function generateClientBundle(_a) {
             switch (_d.label) {
                 case 0:
                     _d.trys.push([0, 2, , 3]);
-                    return [4 /*yield*/, (0, esbuild_1.build)(__assign(__assign(__assign({}, bundleConstants), { bundle: true, minify: true, treeShaking: true, write: false, stdin: {
+                    return [4 /*yield*/, (0, esbuild_1.build)(__assign(__assign(__assign({}, bundleConstants), { bundle: true, minify: true, treeShaking: true, jsxImportSource: "preact", stdin: {
                                 contents: getHydrationScript(filePath, pageName),
                                 resolveDir: process.cwd(),
                             }, plugins: [(0, esbuild_plugin_gzip_1.default)({ gzip: true })], target: "esnext", outfile: (0, path_1.join)(".ssr/output/static", "".concat(pageName, ".bundle.js")) }), global_1.watchOnDev))];

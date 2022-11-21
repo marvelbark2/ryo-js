@@ -15,13 +15,18 @@ register({
 const args = process.argv.slice(2);
 (async () => {
     if (args.includes("build")) {
-        const before = new Date().getTime();
-        const buildReport = await build();
-        const data = JSON.stringify(buildReport, null, 2);
-        console.log("🕧 Building pages report");
-        const jsonReportPath = join(process.cwd(), ".ssr/build-report.json");
-        writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
-        console.log("\n✅ Build completed in " + (new Date().getTime() - before) + "ms");
+        try {
+            const before = new Date().getTime();
+            const buildReport = await build();
+            const data = JSON.stringify(buildReport, null, 2);
+            console.log("🕧 Building pages report");
+            const jsonReportPath = join(process.cwd(), ".ssr/build-report.json");
+            writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
+            console.log("\n✅ Build completed in " + (new Date().getTime() - before) + "ms");
+        }
+        catch (e) {
+            console.error(e);
+        }
     }
     else if (args.includes("start")) {
         server();

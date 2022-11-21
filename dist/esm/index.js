@@ -50,29 +50,37 @@ register({
 });
 var args = process.argv.slice(2);
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var before, buildReport, data, jsonReportPath, buildReport, data, jsonReportPath, uws_1;
+    var before, buildReport, data, jsonReportPath, e_1, buildReport, data, jsonReportPath, uws_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                if (!args.includes("build")) return [3 /*break*/, 2];
+                if (!args.includes("build")) return [3 /*break*/, 5];
+                _a.label = 1;
+            case 1:
+                _a.trys.push([1, 3, , 4]);
                 before = new Date().getTime();
                 return [4 /*yield*/, build()];
-            case 1:
+            case 2:
                 buildReport = _a.sent();
                 data = JSON.stringify(buildReport, null, 2);
                 console.log("🕧 Building pages report");
                 jsonReportPath = join(process.cwd(), ".ssr/build-report.json");
                 writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
                 console.log("\n✅ Build completed in " + (new Date().getTime() - before) + "ms");
-                return [3 /*break*/, 6];
-            case 2:
-                if (!args.includes("start")) return [3 /*break*/, 3];
-                server();
-                return [3 /*break*/, 6];
+                return [3 /*break*/, 4];
             case 3:
-                if (!args.includes("dev")) return [3 /*break*/, 5];
+                e_1 = _a.sent();
+                console.error(e_1);
+                return [3 /*break*/, 4];
+            case 4: return [3 /*break*/, 9];
+            case 5:
+                if (!args.includes("start")) return [3 /*break*/, 6];
+                server();
+                return [3 /*break*/, 9];
+            case 6:
+                if (!args.includes("dev")) return [3 /*break*/, 8];
                 return [4 /*yield*/, build()];
-            case 4:
+            case 7:
                 buildReport = _a.sent();
                 data = JSON.stringify(buildReport, null, 2);
                 console.log("🕧 Building pages report");
@@ -86,11 +94,11 @@ var args = process.argv.slice(2);
                         uws_1 = server("dev");
                     }
                 });
-                return [3 /*break*/, 6];
-            case 5:
+                return [3 /*break*/, 9];
+            case 8:
                 console.error("Invalid command");
-                _a.label = 6;
-            case 6: return [2 /*return*/];
+                _a.label = 9;
+            case 9: return [2 /*return*/];
         }
     });
 }); })();

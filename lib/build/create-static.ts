@@ -3,9 +3,10 @@ import { join } from "path";
 import { generateClientBundle } from "./bundler-component.js";
 import { writeFileSync } from "fs"
 import { render } from "preact-render-to-string";
-import { createElement } from "preact";
+import { createElement, h } from "preact";
 import { build } from "esbuild";
 import { watchOnDev } from "../utils/global.js";
+import EntryClient, { Wrapper } from "../entry";
 
 async function generateData(filePath: string, pageName: string) {
   const building = await build({
@@ -20,6 +21,8 @@ async function generateData(filePath: string, pageName: string) {
   })
   return building;
 }
+
+
 export async function createStaticFile(
   Component: any,
   filePath: string,
@@ -34,6 +37,7 @@ export async function createStaticFile(
 
   try {
     const App = Component.default || Component;
+    const ParentLayout = Component.Parent || EntryClient;
     let data = null;
 
     if (options?.data && Component.data) {
@@ -44,7 +48,17 @@ export async function createStaticFile(
       }
       await generateData(filePath, pageName);
     }
-    const Element = createElement(App, { data: data ?? null });
+
+
+    const Element = h(App, { data: data ?? null }, null);
+    const Parent = createElement(Wrapper, { Parent: ParentLayout, Child: Element, id: pageName }, Element);
+
+    await build({
+      bundle: true,
+      minify: true,
+      treeShaking: true,
+
+    })
     writeFileSync(
       join(outdir, options?.fileName || `${pageName}.html`),
       `<!DOCTYPE html>
@@ -57,7 +71,7 @@ export async function createStaticFile(
 
         </head>
         <body>
-          <div id="root">${render(Element)}</div>
+          <div id="root">${render(Parent)}</div>
           ${Component.data ? `<script src="/${pageName}.data.js" ></script>` : ''}
           <script src="/${pageName}.bundle.js" defer></script>
           

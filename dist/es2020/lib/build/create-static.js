@@ -35,7 +35,7 @@ export async function createStaticFile(Component, filePath, pageName, options = 
             }
             await generateData(filePath, pageName);
         }
-        const Element = createElement(App, { data: data ?? null });
+        const Element = createElement(<App />, { data: data ?? null });
         writeFileSync(join(outdir, options?.fileName || `${pageName}.html`), `<!DOCTYPE html>
         <head>
           <meta charset="UTF-8">

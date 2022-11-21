@@ -112,51 +112,51 @@ var isEndsWith = function (collection, name) {
 var buildComponent = function (Component, page, pageName, outdir, outWSdir) { return __awaiter(void 0, void 0, void 0, function () {
     var keys;
     return __generator(this, function (_a) {
-        keys = Object.keys(Component);
-        if (isEndsWith([".tsx", ".jsx"], page)) {
-            buildReport['/' + pageName] = keys.includes("data");
-            if (keys.includes("data") && keys.includes("server")) {
-                throw new Error("Page ".concat(pageName, " has both data and server. This is not supported."));
-            }
-            if (keys.includes("server")) {
+        switch (_a.label) {
+            case 0:
+                keys = Object.keys(Component);
+                if (!isEndsWith([".tsx", ".jsx"], page)) return [3 /*break*/, 4];
+                buildReport['/' + pageName] = keys.includes("data");
+                if (keys.includes("data") && keys.includes("server")) {
+                    throw new Error("Page ".concat(pageName, " has both data and server. This is not supported."));
+                }
+                if (!keys.includes("server")) return [3 /*break*/, 2];
                 buildReport['/' + pageName] = "server";
                 console.timeEnd("🕧 Building: " + pageName);
-                return [2 /*return*/, (0, create_ssr_1.generateSSRPages)({ outdir: outWSdir, pageName: pageName, path: page })];
-            }
-            console.timeEnd("🕧 Building: " + pageName);
-            return [2 /*return*/, (0, create_static_1.createStaticFile)(Component, page, pageName, { outdir: outdir, bundle: true, data: keys.includes("data") })];
+                return [4 /*yield*/, (0, create_ssr_1.generateSSRPages)({ outdir: outWSdir, pageName: pageName, path: page })];
+            case 1: return [2 /*return*/, _a.sent()];
+            case 2:
+                console.timeEnd("🕧 Building: " + pageName);
+                return [4 /*yield*/, (0, create_static_1.createStaticFile)(Component, page, pageName, { outdir: outdir, bundle: true, data: keys.includes("data") })];
+            case 3: return [2 /*return*/, _a.sent()];
+            case 4:
+                if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
+                    buildReport['/' + pageName] = "api";
+                }
+                else if (isEndsWith([".ev.js", "ev.ts"], page)) {
+                    buildReport['/' + pageName] = "event";
+                }
+                else {
+                    buildReport['/' + pageName] = true;
+                }
+                console.timeEnd("🕧 Building: " + pageName);
+                return [4 /*yield*/, (0, create_server_1.generateServerScript)({ comp: page, outdir: outWSdir, pageName: pageName })];
+            case 5: return [2 /*return*/, _a.sent()];
         }
-        else {
-            if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
-                buildReport['/' + pageName] = "api";
-            }
-            else if (isEndsWith([".ev.js", "ev.ts"], page)) {
-                buildReport['/' + pageName] = "event";
-            }
-            else {
-                buildReport['/' + pageName] = true;
-            }
-            console.timeEnd("🕧 Building: " + pageName);
-            return [2 /*return*/, (0, create_server_1.generateServerScript)({ comp: page, outdir: outWSdir, pageName: pageName })];
-        }
-        return [2 /*return*/];
     });
 }); };
 var tsConfigFile = (0, path_1.join)(process.cwd(), "tsconfig.json");
 var isTsConfigFileExists = (0, fs_1.existsSync)(tsConfigFile);
 var tsxTransformOptions = {
-    loader: 'tsx',
-    target: 'es2015',
-    format: 'cjs',
-    jsxFactory: 'h',
-    jsxFragment: 'Fragment',
-    jsxImportSource: 'preact',
     minify: true,
-    jsx: 'automatic'
+    format: "esm",
+    target: "es2019",
 };
+console.log(isTsConfigFileExists ? tsConfigFile : undefined);
 function buildClient() {
     return __awaiter(this, void 0, void 0, function () {
-        var pages, ssrdir, pkg_1, outdir_1, outWSdir_1, error_1;
+        var pages, ssrdir, pkg_1, outdir_1, outWSdir_1, allBuilds, error_1;
+        var _this = this;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -171,47 +171,53 @@ function buildClient() {
                     outdir_1 = (0, path_1.join)(ssrdir, "output/static");
                     outWSdir_1 = (0, path_1.join)(ssrdir, "output/server");
                     reg();
-                    // clear outdir
-                    return [4 /*yield*/, Promise.allSettled(pages
-                            .filter(function (page) { return isEndsWith([".js", ".jsx", ".ts", ".tsx"], page); })
-                            .map(function (page) {
-                            var _a;
-                            if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx"], page)) {
-                                throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
+                    allBuilds = pages
+                        .filter(function (page) { return isEndsWith([".js", ".jsx", ".ts", ".tsx"], page); })
+                        .map(function (page) { return __awaiter(_this, void 0, void 0, function () {
+                        var pageName, result, code, Component, Component_2;
+                        return __generator(this, function (_a) {
+                            var _b;
+                            switch (_a.label) {
+                                case 0:
+                                    if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx"], page)) {
+                                        throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
+                                    }
+                                    pageName = (0, page_1.getPageName)(page);
+                                    console.time("🕧 Building: " + pageName);
+                                    if (!page.endsWith(".ts")) return [3 /*break*/, 2];
+                                    buildReport['/' + pageName] = true;
+                                    console.timeEnd("🕧 Building: " + pageName);
+                                    return [4 /*yield*/, (0, create_server_1.generateServerScript)({ comp: page, outdir: outWSdir_1, pageName: pageName })];
+                                case 1: return [2 /*return*/, _a.sent()];
+                                case 2:
+                                    if (!page.endsWith(".tsx")) return [3 /*break*/, 4];
+                                    result = (0, esbuild_1.buildSync)({
+                                        entryPoints: [page],
+                                        bundle: true,
+                                        tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
+                                        external: __spreadArray(__spreadArray(__spreadArray(["preact", "react"], Object.keys(pkg_1.dependencies || {}), true), Object.keys(pkg_1.peerDependencies || {}), true), Object.keys(pkg_1.devDependencies || {}), true),
+                                        write: false,
+                                        format: "cjs",
+                                    });
+                                    code = result.outputFiles[0].text;
+                                    Component = (0, module_from_string_1.importFromStringSync)(code, {
+                                        // @ts-ignore
+                                        transformOptions: __assign({}, tsxTransformOptions),
+                                        filename: page
+                                    });
+                                    console.log({ Component: Component });
+                                    return [4 /*yield*/, buildComponent(Component, page, pageName, outdir_1, outWSdir_1)];
+                                case 3: return [2 /*return*/, _a.sent()];
+                                case 4: return [4 /*yield*/, (_b = page, Promise.resolve().then(function () { return __importStar(require(_b)); }))];
+                                case 5:
+                                    Component_2 = _a.sent();
+                                    return [4 /*yield*/, buildComponent(Component_2, page, pageName, outdir_1, outWSdir_1)];
+                                case 6: return [2 /*return*/, _a.sent()];
                             }
-                            var pageName = (0, page_1.getPageName)(page);
-                            console.time("🕧 Building: " + pageName);
-                            if (page.endsWith(".ts")) {
-                                buildReport['/' + pageName] = true;
-                                console.timeEnd("🕧 Building: " + pageName);
-                                return (0, create_server_1.generateServerScript)({ comp: page, outdir: outWSdir_1, pageName: pageName });
-                            }
-                            else if (page.endsWith(".tsx")) {
-                                var result = (0, esbuild_1.buildSync)({
-                                    loader: { ".tsx": "tsx", ".ts": "ts" },
-                                    bundle: true,
-                                    external: __spreadArray(__spreadArray([], Object.keys(pkg_1.dependencies || {}), true), Object.keys(pkg_1.peerDependencies || {}), true),
-                                    tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
-                                    entryPoints: [page],
-                                    write: false,
-                                    format: "esm",
-                                    outdir: "out"
-                                });
-                                var code = (result.outputFiles)[0].text;
-                                var Component = (0, module_from_string_1.importFromStringSync)(code, {
-                                    // @ts-ignore
-                                    transformOptions: __assign({}, tsxTransformOptions),
-                                    filename: page
-                                });
-                                return buildComponent(Component, page, pageName, outdir_1, outWSdir_1);
-                            }
-                            // @ts-ignore
-                            return (_a = page, Promise.resolve().then(function () { return __importStar(require(_a)); })).then(function (Component) {
-                                return buildComponent(Component, page, pageName, outdir_1, outWSdir_1);
-                            }).catch(function (err) { return console.error(err); });
-                        }))];
+                        });
+                    }); });
+                    return [4 /*yield*/, Promise.all(allBuilds)];
                 case 2:
-                    // clear outdir
                     _a.sent();
                     generateFrameworkJSBundle();
                     return [3 /*break*/, 4];
@@ -237,13 +243,21 @@ function copyPublicFiles() {
 }
 function build() {
     return __awaiter(this, void 0, void 0, function () {
+        var e_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
-                case 0: return [4 /*yield*/, buildClient()];
+                case 0:
+                    _a.trys.push([0, 2, , 3]);
+                    return [4 /*yield*/, buildClient()];
                 case 1:
                     _a.sent();
                     copyPublicFiles();
                     return [2 /*return*/, buildReport];
+                case 2:
+                    e_1 = _a.sent();
+                    console.error(e_1);
+                    return [3 /*break*/, 3];
+                case 3: return [2 /*return*/];
             }
         });
     });

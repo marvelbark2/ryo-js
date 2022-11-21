@@ -301,7 +301,6 @@ function server(env) {
             }
         });
     }
-    var apiModulesCache = new Map();
     var getModuleFromPage = function (pageName) {
         var filePath = (0, path_1.join)(pwd, ".ssr", "output", "server", "".concat(pageName, ".js"));
         requireCaches.add(filePath);
@@ -751,7 +750,7 @@ function server(env) {
         }
         app.get("".concat(pageServerName, ".bundle.js"), function (res, req) {
             if (env === "production") {
-                cachingBundles(res);
+                //  cachingBundles(res);
             }
             var path = req.getUrl();
             var exts = path.split(".");

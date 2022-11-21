@@ -248,8 +248,6 @@ export default function server(env = "production") {
 
     }
 
-    const apiModulesCache = new Map();
-
     const getModuleFromPage = (pageName: string) => {
         const filePath = join(pwd, ".ssr", "output", "server", `${pageName}.js`);
         requireCaches.add(filePath);
@@ -668,7 +666,7 @@ export default function server(env = "production") {
 
             app.get(`${pageServerName}.bundle.js`, (res, req) => {
                 if (env === "production") {
-                    cachingBundles(res);
+                    //  cachingBundles(res);
                 }
                 const path = req.getUrl();
                 const exts = path.split(".");
