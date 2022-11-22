@@ -1,25 +1,20 @@
 import { join } from "path";
-import { buildSync } from "esbuild";
+import { build } from "esbuild";
 
-function getScript(outdir: string, pageName: string, path: string) {
-    const outFunc = join(outdir, "pages", `${pageName}.js`)
+async function getScript(outdir: string, pageName: string, path: string) {
+    const outFunc = join(outdir, "pages")
 
-
-    buildSync({
+    return await build({
         bundle: false,
-        entryPoints: [path],
-        target: "node15",
-        outfile: outFunc,
-        //format: "esm",
-        //splitting: false,
+        entryPoints: {
+            [`${pageName}`]: path
+        },
+        outdir: outFunc,
+        format: "esm",
+        splitting: true,
         jsxFactory: 'h',
         jsxFragment: 'Fragment',
-        allowOverwrite: false,
-        inject: [join(process.cwd(), "lib/build/preact-shim.js")],
     })
-
-
-    return Promise.resolve("test");
 }
 export async function generateSSRPages({
     path,
@@ -29,6 +24,6 @@ export async function generateSSRPages({
     try {
         return await getScript(outdir, pageName, path);
     } catch (e) {
-        console.error(e);
+        throw e;
     }
 }

@@ -1,9 +1,6 @@
 //@ts-ignore
 import { useEffect, useRef, useState } from "react";
 
-
-
-
 export default function EventSignal(source: string) {
     const [value, setValue] = useState("");
     const eventSource = useRef(null);

@@ -2,8 +2,9 @@ import * as uws from "uWebSockets.js";
 import { join } from "path";
 import { gzip } from "zlib";
 import { render as preactRender } from "preact-render-to-string";
-import { createReadStream, existsSync } from 'fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'fs';
 import { PassThrough, Readable } from 'stream';
+import ps from "./utils/pubsub";
 
 import babelRegister from "@babel/register";
 
@@ -14,10 +15,13 @@ import { createElement } from "preact";
 
 import { generateClientBundle } from "./runtime/transpilor";
 import { getPages } from "./utils/page";
+import { importFromStringSync } from "module-from-string";
 
 
 let uwsToken: uws.us_listen_socket | null;
 const requireCaches = new Set<string>()
+const shouldRestart: string[] = [];
+
 // TODO: Convert renders to abstracted classes
 export default function server(env = "production") {
     babelRegister({
@@ -29,6 +33,7 @@ export default function server(env = "production") {
     const _require = require;
     const pwd = process.cwd();
 
+    shouldRestart.push("N");
     /* Helper function converting Node.js buffer to ArrayBuffer */
     function toArrayBuffer(buffer: Buffer) {
         return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
@@ -124,28 +129,29 @@ export default function server(env = "production") {
 
     const cachedData = new Map();
     const cachedChange: string[] = [];
-    const cachedDataPages = new Map();
 
-    const getDataModule = (pageName: string) => {
-        if (cachedDataPages.has(pageName)) {
-            return cachedDataPages.get(pageName);
-        } else {
-            const filePath = join(pwd, ".ssr", "output", "server", "data", `${pageName}.data.js`);
-            requireCaches.add(filePath);
-            const result = _require(filePath);
-            cachedDataPages.set(pageName, result);
-            return result;
-        }
+
+    const getDataModule = async (pageName: string) => {
+        const filePath = join(pwd, ".ssr", "output", "server", "data", `${pageName}.data.js`);
+        //requireCaches.add(filePath);
+        const result = await import(filePath);
+        return result;
     }
 
     async function renderData(res: uws.HttpResponse, pageName: string) {
-        res.writeHeader("Content-Type", "application/javascript");
-        res.writeHeader("Content-Encoding", "gzip");
-
-        const { data } = getDataModule(pageName);
         res.onAborted(() => {
             res.aborted = true;
         });
+
+        res.writeHeader("Content-Type", "application/javascript");
+        res.writeHeader("Content-Encoding", "gzip");
+
+        const dataModule = await getDataModule(pageName);
+        console.log("🚀 ~ file: index.ts ~ line 150 ~ renderData ~ dataModule", dataModule)
+
+        const data = dataModule.data;
+        console.log("🚀 ~ file: index.ts ~ line 150 ~ renderData ~ data", data)
+
 
         if (typeof data === 'function') {
 
@@ -423,7 +429,7 @@ export default function server(env = "production") {
     }
 
     async function render(res: uws.HttpResponse, req: uws.HttpRequest, path = req.getUrl(), params?: string): Promise<any> {
-        //const path = req.getUrl();
+        console.log("🚀 ~ file: index.ts ~ line 421 ~ render ~ path", path)
         res.onAborted(() => {
             res.aborted = true;
         });
@@ -510,7 +516,14 @@ export default function server(env = "production") {
         generateClientBundle
         try {
             const componentPath = join(pwd, ".ssr", "output", "server", "pages", path + ".js");
-            const component = _require(componentPath);
+            const splittedPath = path.split("/");
+            splittedPath.pop();
+            const pageDirName = join(pwd, "src", splittedPath.join("/"));
+            console.log("🚀 ~ file: index.ts ~ line 519 ~ renderServer ~ pageDirName", pageDirName)
+            const component = importFromStringSync(readFileSync(componentPath).toString(), {
+                dirname: pageDirName,
+
+            })
             const defaultComponent = component.default.constructor.name === 'AsyncFunction' ? await component.default() : component.default();
             const Element = createElement(() => defaultComponent, null);
             res.writeHeader("Content-Type", "text/html");
@@ -584,6 +597,8 @@ export default function server(env = "production") {
     }
 
 
+
+
     Object.keys(buildReport)
         .sort((a, b) => {
             if (a === "/index") return -1;
@@ -628,7 +643,7 @@ export default function server(env = "production") {
                         return render(res, req);
                     } else {
                         const stream = createReadStream(filePath);
-                        const size = stream.bytesRead;
+                        const size = statSync(filePath).size;
                         return pipeStreamOverResponse(res, stream, size);
                     }
                 })
@@ -656,6 +671,7 @@ export default function server(env = "production") {
 
             app.get(`${pageServerName}.data.js`, (res, req) => {
                 const path = req.getUrl();
+                console.log("🚀 ~ file: index.ts ~ line 654 ~ DATA ~ path", path)
                 const [pageName] = path.split(".");
                 if (buildReport[pageName]) {
                     return renderData(res, pageName);
@@ -710,6 +726,25 @@ export default function server(env = "production") {
             })
         }
     })
+
+
+    if (process.env.NODE_ENV === "development" || env === "dev") {
+        app.get("/ryo_framework", (res) => {
+            sendHeaders(res);
+            res.writeStatus('200 OK');
+
+            const unsub = ps.subscribe((msg) => {
+                if (msg === "refresh" && shouldRestart.length > 0) {
+                    res.write(serializeData({ restart: true }))
+                    shouldRestart.pop();
+                }
+            });
+
+            res.onAborted(() => {
+                unsub();
+            })
+        })
+    }
 
     app.listen(3000, (token) => {
         if (token) {

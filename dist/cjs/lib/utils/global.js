@@ -68,11 +68,12 @@ var pubsub_1 = __importDefault(require("./pubsub"));
 exports.watchOnDev = {
     watch: process.env.NODE_ENV === "development" ? {
         onRebuild: function (error, result) {
+            var at = Date.now();
             if (error)
                 console.error("watch build failed:", error);
             else {
-                console.log("watch build succeeded:", result);
-                pubsub_1.default.publish("restart");
+                console.log("watch build succeeded: ", result.outputFiles[0].path);
+                pubsub_1.default.publish("restart-" + at);
             }
         }
     } : undefined

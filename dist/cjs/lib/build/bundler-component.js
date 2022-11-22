@@ -46,6 +46,15 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -62,14 +71,23 @@ var fetchParams = function (pageName) {
     else
         return "\n    window.fetchParams = () => {\n        const currentPage = window.location.pathname;\n        const searchParams = new URLSearchParams(window.location.search);\n        const params = {};\n        for(let [key, value] of searchParams.entries()) {\n            params[key] = value;\n        }\n        return params;\n      }";
 };
-var getHydrationScript = function (filePath, pageName) { return "\n  import {hydrate, createElement, h} from \"preact\"\n  import * as Module from \"".concat(filePath, "\";\n\n  const Component = Module.default || Module;\n  const Parent = Module.Parent;\n\n  document.getElementById(\"").concat(pageName, "\").innerHTML = \"\";\n\n  if(window.getData) {\n    const Element = createElement(Component, {data: JSON.parse(window.getData())});\n    const W = h(\"span\", {id: \"").concat(pageName, "\"}, Element);\n    if(Parent) {\n        const ParentElement = createElement(Parent, {}, W);\n        hydrate(ParentElement, document.getElementById(\"root\"))\n    } else {\n        hydrate(W, document.getElementById(\"").concat(pageName, "\"))\n    }\n\n    const ws = new WebSocket('ws://'+ window.location.host + '/").concat(pageName, ".data')\n  \n    ws.onopen = () => {\n      ws.onmessage = (e) => {\n          const data = JSON.parse(e.data)\n          if(data.type === 'change') {\n              const newElement = createElement(Component, {data: data.payload})\n              const NW = h(\"span\", {id: \"").concat(pageName, "\"}, newElement);\n              document.getElementById(\"").concat(pageName, "\").innerHTML = \"\";\n              hydrate(NW, document.getElementById(\"").concat(pageName, "\"))\n          }\n      }\n    }\n  } else {\n    const Element = createElement(Component)\n    const ParentElement = createElement(Parent, {id: '").concat(pageName, "'}, Element);\n    hydrate(ParentElement, document.getElementById('").concat(pageName, "'))\n  }\n\n  ").concat(fetchParams(pageName), "\n"); };
+var getWSDataReload = function (data, pageName) {
+    console.log({ data: data, pageName: pageName });
+    if (data && data.invalidate)
+        return "const ws = new WebSocket('ws://'+ window.location.host + '/".concat(pageName, ".data')\n        ws.onopen = () => {\n        ws.onmessage = (e) => {\n            const data = JSON.parse(e.data)\n            if(data.type === 'change') {\n                const newElement = createElement(Component, {data: data.payload})\n                hydrate(newElement, document.getElementById(\"").concat(pageName, "\"))\n            }\n        }\n        }");
+};
+var getHydrationScript = function (filePath, pageName, data) { return __awaiter(void 0, void 0, void 0, function () {
+    return __generator(this, function (_a) {
+        return [2 /*return*/, "\n  import {hydrate, createElement, h} from \"preact\"\n  import * as Module from \"".concat(filePath, "\";\n\n  const Component = Module.default || Module;\n  const Parent = Module.Parent;\n\n  document.getElementById(\"").concat(pageName, "\").innerHTML = \"\";\n\n  if(window.getData) {\n    const Element = createElement(Component, {data: JSON.parse(window.getData())});\n    const W = h(\"span\", {id: \"").concat(pageName, "\"}, Element);\n    if(Parent) {\n        const ParentElement = createElement(Parent, {}, W);\n        hydrate(ParentElement, document.getElementById(\"root\"))\n    } else {\n        hydrate(Element, document.getElementById(\"").concat(pageName, "\"))\n    }\n    ").concat(getWSDataReload(data, pageName), "\n  } else {\n    if(Parent) {\n        const Element = createElement(Component)\n        const ParentElement = createElement(Parent, {id: '").concat(pageName, "'}, Element);\n        hydrate(ParentElement, document.getElementById(\"root\"))\n    } else {\n        const Element = createElement(Component);\n        hydrate(Element, document.getElementById(\"").concat(pageName, "\"));\n    }\n   \n  }\n\n  ").concat(fetchParams(pageName), "\n")];
+    });
+}); };
 function generateClientBundle(_a) {
-    var filePath = _a.filePath, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/static/" : _b, pageName = _a.pageName, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
+    var filePath = _a.filePath, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/static/" : _b, pageName = _a.pageName, data = _a.data, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
         bundle: true,
         allowOverwrite: true,
         treeShaking: true,
         minify: true,
-        inject: [(0, path_1.join)(__dirname, "preact-shim.js")],
+        //        inject: [join(__dirname, `preact-shim.js`)],
         loader: { ".ts": "ts", ".tsx": "tsx", ".js": "jsx", ".jsx": "jsx" },
         jsx: "automatic",
         legalComments: "none",
@@ -77,21 +95,39 @@ function generateClientBundle(_a) {
         write: false,
     } : _c;
     return __awaiter(this, void 0, void 0, function () {
-        var e_1;
-        return __generator(this, function (_d) {
-            switch (_d.label) {
+        var pkg, result, _d, _e, text, e_1;
+        var _f, _g;
+        return __generator(this, function (_h) {
+            switch (_h.label) {
                 case 0:
-                    _d.trys.push([0, 2, , 3]);
-                    return [4 /*yield*/, (0, esbuild_1.build)(__assign(__assign(__assign({}, bundleConstants), { bundle: true, minify: true, treeShaking: true, jsxImportSource: "preact", stdin: {
-                                contents: getHydrationScript(filePath, pageName),
-                                resolveDir: process.cwd(),
-                            }, plugins: [(0, esbuild_plugin_gzip_1.default)({ gzip: true })], target: "esnext", outfile: (0, path_1.join)(".ssr/output/static", "".concat(pageName, ".bundle.js")) }), global_1.watchOnDev))];
-                case 1: return [2 /*return*/, _d.sent()];
-                case 2:
-                    e_1 = _d.sent();
+                    _h.trys.push([0, 6, , 7]);
+                    return [4 /*yield*/, (0, global_1.getProjectPkg)()];
+                case 1:
+                    pkg = _h.sent();
+                    _d = esbuild_1.build;
+                    _e = [__assign({}, bundleConstants)];
+                    _f = { bundle: true, minify: true, treeShaking: true, jsxImportSource: "preact" };
+                    _g = {};
+                    return [4 /*yield*/, getHydrationScript(filePath, pageName, data)];
+                case 2: return [4 /*yield*/, _d.apply(void 0, [__assign.apply(void 0, [__assign.apply(void 0, [__assign.apply(void 0, _e.concat([(_f.stdin = (_g.contents = _h.sent(),
+                                        _g.resolveDir = process.cwd(),
+                                        _g), _f.plugins = [(0, esbuild_plugin_gzip_1.default)({ gzip: true })], _f.target = "esnext", _f.outfile = (0, path_1.join)(".ssr/output/static", "".concat(pageName, ".bundle.js")), _f.metafile = true, _f)])), global_1.watchOnDev]), { external: __spreadArray(__spreadArray(__spreadArray([], Object.keys(pkg.dependencies || {}), true), Object.keys(pkg.peerDependencies || {}), true), Object.keys(pkg.devDependencies || {}), true).filter(function (x) { return !x.includes('ryo.js'); }) }])])];
+                case 3:
+                    result = _h.sent();
+                    if (!result.metafile) return [3 /*break*/, 5];
+                    return [4 /*yield*/, (0, esbuild_1.analyzeMetafile)(result.metafile, {
+                            verbose: true,
+                        })];
+                case 4:
+                    text = _h.sent();
+                    console.log(text);
+                    _h.label = 5;
+                case 5: return [2 /*return*/, result];
+                case 6:
+                    e_1 = _h.sent();
                     console.error({ e: e_1, filePath: filePath });
-                    return [3 /*break*/, 3];
-                case 3: return [2 /*return*/];
+                    return [3 /*break*/, 7];
+                case 7: return [2 /*return*/];
             }
         });
     });

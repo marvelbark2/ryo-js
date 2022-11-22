@@ -9,9 +9,14 @@ var esbuild_1 = require("esbuild");
 var esbuild_plugin_gzip_1 = __importDefault(require("@luncheon/esbuild-plugin-gzip"));
 function getScript() {
     var out = (0, path_1.join)(process.cwd(), ".ssr/output/static", "framework-system.js");
+    var entryPoints = [(0, path_1.join)(__dirname, "ryo-tools.js")];
+    if (process.env.NODE_ENV === 'development') {
+        entryPoints.push((0, path_1.join)(__dirname, "ryo-tools-dev.js"));
+    }
+    ;
     (0, esbuild_1.build)({
         bundle: true,
-        entryPoints: [(0, path_1.join)(__dirname, "preact-tools.js")],
+        entryPoints: entryPoints,
         outfile: out,
         splitting: false,
         jsxFactory: 'h',

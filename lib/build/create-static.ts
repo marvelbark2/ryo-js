@@ -4,22 +4,34 @@ import { generateClientBundle } from "./bundler-component.js";
 import { writeFileSync } from "fs"
 import { render } from "preact-render-to-string";
 import { createElement, h } from "preact";
-import { build } from "esbuild";
-import { watchOnDev } from "../utils/global.js";
+import { build, analyzeMetafile } from "esbuild";
+import { getProjectPkg, watchOnDev } from "../utils/global.js";
 import EntryClient, { Wrapper } from "../entry";
 
+const projectPkg = getProjectPkg();
+
+
 async function generateData(filePath: string, pageName: string) {
-  const building = await build({
-    bundle: true,
-    minify: true,
-    treeShaking: true,
+  const pkg = await projectPkg;
+
+  const result = await build({
     entryPoints: [filePath],
-    target: "node15",
-    platform: 'node',
+    bundle: true,
+    format: "esm",
+    treeShaking: true,
+    external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})].filter(x => !x.includes('ryo.js')),
+    metafile: true,
     outfile: join(".ssr/output/server/data", `${pageName}.data.js`),
     ...watchOnDev
   })
-  return building;
+
+  if (result.metafile) {
+    let text = await analyzeMetafile(result.metafile, {
+      verbose: true,
+    })
+    console.log(text)
+  }
+  return result;
 }
 
 
@@ -30,10 +42,6 @@ export async function createStaticFile(
   options: { bundle: boolean; data: boolean; outdir: string; fileName?: string } | undefined = { bundle: true, data: false, outdir: ".ssr/output/static", fileName: undefined }
 ) {
   const outdir = options?.outdir || join(".ssr/output/static");
-
-  if (options?.bundle) {
-    await generateClientBundle({ filePath, outdir, pageName });
-  }
 
   try {
     const App = Component.default || Component;
@@ -49,6 +57,9 @@ export async function createStaticFile(
       await generateData(filePath, pageName);
     }
 
+    if (options?.bundle) {
+      await generateClientBundle({ filePath, outdir, pageName, data: Component.data });
+    }
 
     const Element = h(App, { data: data ?? null }, null);
     const Parent = createElement(Wrapper, { Parent: ParentLayout, Child: Element, id: pageName }, Element);
@@ -62,20 +73,20 @@ export async function createStaticFile(
     writeFileSync(
       join(outdir, options?.fileName || `${pageName}.html`),
       `<!DOCTYPE html>
+        <html lang="en">
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <link rel="preload" href="/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
           <noscript><link rel="stylesheet" href="/styles.css"></noscript>    
           <script src="/framework-system.js" defer></script>
-
         </head>
         <body>
           <div id="root">${render(Parent)}</div>
           ${Component.data ? `<script src="/${pageName}.data.js" ></script>` : ''}
           <script src="/${pageName}.bundle.js" defer></script>
-          
-        </body>`
+        </body>
+        </html>`
     );
 
   } catch (error) {

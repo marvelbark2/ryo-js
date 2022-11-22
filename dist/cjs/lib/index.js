@@ -68,13 +68,16 @@ var zlib_1 = require("zlib");
 var preact_render_to_string_1 = require("preact-render-to-string");
 var fs_1 = require("fs");
 var stream_1 = require("stream");
+var pubsub_1 = __importDefault(require("./utils/pubsub"));
 var register_1 = __importDefault(require("@babel/register"));
 require("./polyfills/index");
 var preact_1 = require("preact");
 var transpilor_1 = require("./runtime/transpilor");
 var page_1 = require("./utils/page");
+var module_from_string_1 = require("module-from-string");
 var uwsToken;
 var requireCaches = new Set();
+var shouldRestart = [];
 // TODO: Convert renders to abstracted classes
 function server(env) {
     var _this = this;
@@ -87,6 +90,7 @@ function server(env) {
     });
     var _require = require;
     var pwd = process.cwd();
+    shouldRestart.push("N");
     /* Helper function converting Node.js buffer to ArrayBuffer */
     function toArrayBuffer(buffer) {
         return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
@@ -166,41 +170,47 @@ function server(env) {
     var isStatic = new Map();
     var cachedData = new Map();
     var cachedChange = [];
-    var cachedDataPages = new Map();
-    var getDataModule = function (pageName) {
-        if (cachedDataPages.has(pageName)) {
-            return cachedDataPages.get(pageName);
-        }
-        else {
-            var filePath = (0, path_1.join)(pwd, ".ssr", "output", "server", "data", "".concat(pageName, ".data.js"));
-            requireCaches.add(filePath);
-            var result = _require(filePath);
-            cachedDataPages.set(pageName, result);
-            return result;
-        }
-    };
+    var getDataModule = function (pageName) { return __awaiter(_this, void 0, void 0, function () {
+        var filePath, result;
+        return __generator(this, function (_a) {
+            var _b;
+            switch (_a.label) {
+                case 0:
+                    filePath = (0, path_1.join)(pwd, ".ssr", "output", "server", "data", "".concat(pageName, ".data.js"));
+                    return [4 /*yield*/, (_b = filePath, Promise.resolve().then(function () { return __importStar(require(_b)); }))];
+                case 1:
+                    result = _a.sent();
+                    return [2 /*return*/, result];
+            }
+        });
+    }); };
     function renderData(res, pageName) {
         return __awaiter(this, void 0, void 0, function () {
-            var data, dataCall, template, cachedValue, template, dataCall_1, template, token_1;
+            var dataModule, data, dataCall, template, cachedValue, template, dataCall_1, template, token_1;
             var _this = this;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        res.writeHeader("Content-Type", "application/javascript");
-                        res.writeHeader("Content-Encoding", "gzip");
-                        data = getDataModule(pageName).data;
                         res.onAborted(function () {
                             res.aborted = true;
                         });
-                        if (!(typeof data === 'function')) return [3 /*break*/, 1];
+                        res.writeHeader("Content-Type", "application/javascript");
+                        res.writeHeader("Content-Encoding", "gzip");
+                        return [4 /*yield*/, getDataModule(pageName)];
+                    case 1:
+                        dataModule = _a.sent();
+                        console.log("🚀 ~ file: index.ts ~ line 150 ~ renderData ~ dataModule", dataModule);
+                        data = dataModule.data;
+                        console.log("🚀 ~ file: index.ts ~ line 150 ~ renderData ~ data", data);
+                        if (!(typeof data === 'function')) return [3 /*break*/, 2];
                         dataCall = data();
                         template = "function getData(){return '".concat(JSON.stringify(dataCall), "';}");
                         (0, zlib_1.gzip)(template, function (_, result) {
                             res.end(result); // result, so just send it.
                         });
-                        return [3 /*break*/, 4];
-                    case 1:
-                        if (!cachedData.has(pageName)) return [3 /*break*/, 2];
+                        return [3 /*break*/, 5];
+                    case 2:
+                        if (!cachedData.has(pageName)) return [3 /*break*/, 3];
                         cachedValue = cachedData.get(pageName);
                         if (!res.aborted) {
                             template = "function getData(){return '".concat(JSON.stringify(cachedValue), "';}");
@@ -208,9 +218,9 @@ function server(env) {
                                 res.end(result);
                             });
                         }
-                        return [3 /*break*/, 4];
-                    case 2: return [4 /*yield*/, data.runner()];
-                    case 3:
+                        return [3 /*break*/, 5];
+                    case 3: return [4 /*yield*/, data.runner()];
+                    case 4:
                         dataCall_1 = (_a.sent());
                         template = "function getData(){return '".concat(JSON.stringify(dataCall_1), "';}");
                         if (!res.aborted) {
@@ -249,8 +259,8 @@ function server(env) {
                                 });
                             }); }, data.invalidate * 1000);
                         }
-                        _a.label = 4;
-                    case 4: return [2 /*return*/];
+                        _a.label = 5;
+                    case 5: return [2 /*return*/];
                 }
             });
         });
@@ -517,7 +527,7 @@ function server(env) {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        //const path = req.getUrl();
+                        console.log("🚀 ~ file: index.ts ~ line 421 ~ render ~ path", path);
                         res.onAborted(function () {
                             res.aborted = true;
                         });
@@ -601,7 +611,7 @@ function server(env) {
     loadWSEndpoints();
     function renderServer(res, path) {
         return __awaiter(this, void 0, void 0, function () {
-            var componentPath, component, defaultComponent_1, _a, Element_1, html, clientBundle, finalHtml, e_3;
+            var componentPath, splittedPath, pageDirName, component, defaultComponent_1, _a, Element_1, html, clientBundle, finalHtml, e_3;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
@@ -613,7 +623,13 @@ function server(env) {
                     case 1:
                         _b.trys.push([1, 6, , 7]);
                         componentPath = (0, path_1.join)(pwd, ".ssr", "output", "server", "pages", path + ".js");
-                        component = _require(componentPath);
+                        splittedPath = path.split("/");
+                        splittedPath.pop();
+                        pageDirName = (0, path_1.join)(pwd, "src", splittedPath.join("/"));
+                        console.log("🚀 ~ file: index.ts ~ line 519 ~ renderServer ~ pageDirName", pageDirName);
+                        component = (0, module_from_string_1.importFromStringSync)((0, fs_1.readFileSync)(componentPath).toString(), {
+                            dirname: pageDirName,
+                        });
                         if (!(component.default.constructor.name === 'AsyncFunction')) return [3 /*break*/, 3];
                         return [4 /*yield*/, component.default()];
                     case 2:
@@ -754,7 +770,7 @@ function server(env) {
                 }
                 else {
                     var stream = (0, fs_1.createReadStream)(filePath);
-                    var size = stream.bytesRead;
+                    var size = (0, fs_1.statSync)(filePath).size;
                     return pipeStreamOverResponse(res, stream, size);
                 }
             });
@@ -781,6 +797,7 @@ function server(env) {
         });
         app.get("".concat(pageServerName, ".data.js"), function (res, req) {
             var path = req.getUrl();
+            console.log("🚀 ~ file: index.ts ~ line 654 ~ DATA ~ path", path);
             var pageName = path.split(".")[0];
             if (buildReport[pageName]) {
                 return renderData(res, pageName);
@@ -836,6 +853,21 @@ function server(env) {
             });
         }
     });
+    if (process.env.NODE_ENV === "development" || env === "dev") {
+        app.get("/ryo_framework", function (res) {
+            sendHeaders(res);
+            res.writeStatus('200 OK');
+            var unsub = pubsub_1.default.subscribe(function (msg) {
+                if (msg === "refresh" && shouldRestart.length > 0) {
+                    res.write(serializeData({ restart: true }));
+                    shouldRestart.pop();
+                }
+            });
+            res.onAborted(function () {
+                unsub();
+            });
+        });
+    }
     app.listen(3000, function (token) {
         if (token) {
             uwsToken = token;

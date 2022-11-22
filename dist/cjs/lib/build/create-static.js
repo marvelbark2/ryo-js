@@ -69,6 +69,15 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createStaticFile = void 0;
 var path_1 = require("path");
@@ -79,15 +88,27 @@ var preact_1 = require("preact");
 var esbuild_1 = require("esbuild");
 var global_js_1 = require("../utils/global.js");
 var entry_1 = __importStar(require("../entry"));
+var projectPkg = (0, global_js_1.getProjectPkg)();
 function generateData(filePath, pageName) {
     return __awaiter(this, void 0, void 0, function () {
-        var building;
+        var pkg, result, text;
         return __generator(this, function (_a) {
             switch (_a.label) {
-                case 0: return [4 /*yield*/, (0, esbuild_1.build)(__assign({ bundle: true, minify: true, treeShaking: true, entryPoints: [filePath], target: "node15", platform: 'node', outfile: (0, path_1.join)(".ssr/output/server/data", "".concat(pageName, ".data.js")) }, global_js_1.watchOnDev))];
+                case 0: return [4 /*yield*/, projectPkg];
                 case 1:
-                    building = _a.sent();
-                    return [2 /*return*/, building];
+                    pkg = _a.sent();
+                    return [4 /*yield*/, (0, esbuild_1.build)(__assign({ entryPoints: [filePath], bundle: true, format: "esm", treeShaking: true, external: __spreadArray(__spreadArray(__spreadArray([], Object.keys(pkg.dependencies || {}), true), Object.keys(pkg.peerDependencies || {}), true), Object.keys(pkg.devDependencies || {}), true).filter(function (x) { return !x.includes('ryo.js'); }), metafile: true, outfile: (0, path_1.join)(".ssr/output/server/data", "".concat(pageName, ".data.js")) }, global_js_1.watchOnDev))];
+                case 2:
+                    result = _a.sent();
+                    if (!result.metafile) return [3 /*break*/, 4];
+                    return [4 /*yield*/, (0, esbuild_1.analyzeMetafile)(result.metafile, {
+                            verbose: true,
+                        })];
+                case 3:
+                    text = _a.sent();
+                    console.log(text);
+                    _a.label = 4;
+                case 4: return [2 /*return*/, result];
             }
         });
     });
@@ -100,31 +121,33 @@ function createStaticFile(Component, filePath, pageName, options) {
             switch (_a.label) {
                 case 0:
                     outdir = (options === null || options === void 0 ? void 0 : options.outdir) || (0, path_1.join)(".ssr/output/static");
-                    if (!(options === null || options === void 0 ? void 0 : options.bundle)) return [3 /*break*/, 2];
-                    return [4 /*yield*/, (0, bundler_component_js_1.generateClientBundle)({ filePath: filePath, outdir: outdir, pageName: pageName })];
+                    _a.label = 1;
                 case 1:
-                    _a.sent();
-                    _a.label = 2;
-                case 2:
-                    _a.trys.push([2, 9, , 10]);
+                    _a.trys.push([1, 10, , 11]);
                     App = Component.default || Component;
                     ParentLayout = Component.Parent || entry_1.default;
                     data = null;
-                    if (!((options === null || options === void 0 ? void 0 : options.data) && Component.data)) return [3 /*break*/, 7];
-                    if (!(typeof Component.data === "function")) return [3 /*break*/, 3];
+                    if (!((options === null || options === void 0 ? void 0 : options.data) && Component.data)) return [3 /*break*/, 6];
+                    if (!(typeof Component.data === "function")) return [3 /*break*/, 2];
                     data = Component.data();
-                    return [3 /*break*/, 5];
-                case 3:
-                    if (!Object.keys(Component.data).includes('runner')) return [3 /*break*/, 5];
+                    return [3 /*break*/, 4];
+                case 2:
+                    if (!Object.keys(Component.data).includes('runner')) return [3 /*break*/, 4];
                     return [4 /*yield*/, Component.data.runner()];
-                case 4:
+                case 3:
                     data = _a.sent();
-                    _a.label = 5;
-                case 5: return [4 /*yield*/, generateData(filePath, pageName)];
-                case 6:
+                    _a.label = 4;
+                case 4: return [4 /*yield*/, generateData(filePath, pageName)];
+                case 5:
                     _a.sent();
-                    _a.label = 7;
+                    _a.label = 6;
+                case 6:
+                    if (!(options === null || options === void 0 ? void 0 : options.bundle)) return [3 /*break*/, 8];
+                    return [4 /*yield*/, (0, bundler_component_js_1.generateClientBundle)({ filePath: filePath, outdir: outdir, pageName: pageName, data: Component.data })];
                 case 7:
+                    _a.sent();
+                    _a.label = 8;
+                case 8:
                     Element_1 = (0, preact_1.h)(App, { data: data !== null && data !== void 0 ? data : null }, null);
                     Parent = (0, preact_1.createElement)(entry_1.Wrapper, { Parent: ParentLayout, Child: Element_1, id: pageName }, Element_1);
                     return [4 /*yield*/, (0, esbuild_1.build)({
@@ -132,15 +155,15 @@ function createStaticFile(Component, filePath, pageName, options) {
                             minify: true,
                             treeShaking: true,
                         })];
-                case 8:
-                    _a.sent();
-                    (0, fs_1.writeFileSync)((0, path_1.join)(outdir, (options === null || options === void 0 ? void 0 : options.fileName) || "".concat(pageName, ".html")), "<!DOCTYPE html>\n        <head>\n          <meta charset=\"UTF-8\">\n          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n          <link rel=\"preload\" href=\"/styles.css\" as=\"style\" onload=\"this.onload=null;this.rel='stylesheet'\">\n          <noscript><link rel=\"stylesheet\" href=\"/styles.css\"></noscript>    \n          <script src=\"/framework-system.js\" defer></script>\n\n        </head>\n        <body>\n          <div id=\"root\">".concat((0, preact_render_to_string_1.render)(Parent), "</div>\n          ").concat(Component.data ? "<script src=\"/".concat(pageName, ".data.js\" ></script>") : '', "\n          <script src=\"/").concat(pageName, ".bundle.js\" defer></script>\n          \n        </body>"));
-                    return [3 /*break*/, 10];
                 case 9:
+                    _a.sent();
+                    (0, fs_1.writeFileSync)((0, path_1.join)(outdir, (options === null || options === void 0 ? void 0 : options.fileName) || "".concat(pageName, ".html")), "<!DOCTYPE html>\n        <html lang=\"en\">\n        <head>\n          <meta charset=\"UTF-8\">\n          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n          <link rel=\"preload\" href=\"/styles.css\" as=\"style\" onload=\"this.onload=null;this.rel='stylesheet'\">\n          <noscript><link rel=\"stylesheet\" href=\"/styles.css\"></noscript>    \n          <script src=\"/framework-system.js\" defer></script>\n        </head>\n        <body>\n          <div id=\"root\">".concat((0, preact_render_to_string_1.render)(Parent), "</div>\n          ").concat(Component.data ? "<script src=\"/".concat(pageName, ".data.js\" ></script>") : '', "\n          <script src=\"/").concat(pageName, ".bundle.js\" defer></script>\n        </body>\n        </html>"));
+                    return [3 /*break*/, 11];
+                case 10:
                     error_1 = _a.sent();
                     console.error(error_1);
-                    return [3 /*break*/, 10];
-                case 10: return [2 /*return*/];
+                    return [3 /*break*/, 11];
+                case 11: return [2 /*return*/];
             }
         });
     });

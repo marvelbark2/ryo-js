@@ -40,20 +40,28 @@ exports.generateSSRPages = void 0;
 var path_1 = require("path");
 var esbuild_1 = require("esbuild");
 function getScript(outdir, pageName, path) {
-    var outFunc = (0, path_1.join)(outdir, "pages", "".concat(pageName, ".js"));
-    (0, esbuild_1.buildSync)({
-        bundle: false,
-        entryPoints: [path],
-        target: "node15",
-        outfile: outFunc,
-        //format: "esm",
-        //splitting: false,
-        jsxFactory: 'h',
-        jsxFragment: 'Fragment',
-        allowOverwrite: false,
-        inject: [(0, path_1.join)(process.cwd(), "lib/build/preact-shim.js")],
+    return __awaiter(this, void 0, void 0, function () {
+        var outFunc;
+        var _a;
+        return __generator(this, function (_b) {
+            switch (_b.label) {
+                case 0:
+                    outFunc = (0, path_1.join)(outdir, "pages");
+                    return [4 /*yield*/, (0, esbuild_1.build)({
+                            bundle: false,
+                            entryPoints: (_a = {},
+                                _a["".concat(pageName)] = path,
+                                _a),
+                            outdir: outFunc,
+                            format: "esm",
+                            splitting: true,
+                            jsxFactory: 'h',
+                            jsxFragment: 'Fragment',
+                        })];
+                case 1: return [2 /*return*/, _b.sent()];
+            }
+        });
     });
-    return Promise.resolve("test");
 }
 function generateSSRPages(_a) {
     var path = _a.path, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/data/" : _b, pageName = _a.pageName;
@@ -67,8 +75,7 @@ function generateSSRPages(_a) {
                 case 1: return [2 /*return*/, _c.sent()];
                 case 2:
                     e_1 = _c.sent();
-                    console.error(e_1);
-                    return [3 /*break*/, 3];
+                    throw e_1;
                 case 3: return [2 /*return*/];
             }
         });

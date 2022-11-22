@@ -41,10 +41,14 @@ const args = process.argv.slice(2);
         writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
         let uws = server("dev");
         ps.subscribe((msg) => {
-            console.log(msg);
-            if (msg === "restart") {
+
+            if (msg.startsWith("restart-")) {
+                const [_, at] = msg.split("restart-");
                 uws();
                 uws = server("dev");
+                const now = Date.now();
+                console.log(`Dev compiled at restarted for ${now - (+at)}ms`)
+                ps.publish("refresh")
             }
         })
     } else {

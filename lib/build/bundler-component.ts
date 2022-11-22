@@ -1,7 +1,7 @@
 import { join } from "path";
-import { build } from "esbuild";
+import { build, analyzeMetafile } from "esbuild";
 import compress from "@luncheon/esbuild-plugin-gzip";
-import { watchOnDev } from "../utils/global";
+import { getProjectPkg, watchOnDev } from "../utils/global";
 
 
 const fetchParams = (pageName: string) => {
@@ -32,7 +32,22 @@ const fetchParams = (pageName: string) => {
         return params;
       }`;
 }
-const getHydrationScript = (filePath: string, pageName: string) => `
+
+const getWSDataReload = (data: any, pageName: string) => {
+    console.log({ data, pageName })
+    if (data && data.invalidate)
+        return `const ws = new WebSocket('ws://'+ window.location.host + '/${pageName}.data')
+        ws.onopen = () => {
+        ws.onmessage = (e) => {
+            const data = JSON.parse(e.data)
+            if(data.type === 'change') {
+                const newElement = createElement(Component, {data: data.payload})
+                hydrate(newElement, document.getElementById("${pageName}"))
+            }
+        }
+        }`
+}
+const getHydrationScript = async (filePath: string, pageName: string, data: any) => `
   import {hydrate, createElement, h} from "preact"
   import * as Module from "${filePath}";
 
@@ -48,26 +63,19 @@ const getHydrationScript = (filePath: string, pageName: string) => `
         const ParentElement = createElement(Parent, {}, W);
         hydrate(ParentElement, document.getElementById("root"))
     } else {
-        hydrate(W, document.getElementById("${pageName}"))
+        hydrate(Element, document.getElementById("${pageName}"))
     }
-
-    const ws = new WebSocket('ws://'+ window.location.host + '/${pageName}.data')
-  
-    ws.onopen = () => {
-      ws.onmessage = (e) => {
-          const data = JSON.parse(e.data)
-          if(data.type === 'change') {
-              const newElement = createElement(Component, {data: data.payload})
-              const NW = h("span", {id: "${pageName}"}, newElement);
-              document.getElementById("${pageName}").innerHTML = "";
-              hydrate(NW, document.getElementById("${pageName}"))
-          }
-      }
-    }
+    ${getWSDataReload(data, pageName)}
   } else {
-    const Element = createElement(Component)
-    const ParentElement = createElement(Parent, {id: '${pageName}'}, Element);
-    hydrate(ParentElement, document.getElementById('${pageName}'))
+    if(Parent) {
+        const Element = createElement(Component)
+        const ParentElement = createElement(Parent, {id: '${pageName}'}, Element);
+        hydrate(ParentElement, document.getElementById("root"))
+    } else {
+        const Element = createElement(Component);
+        hydrate(Element, document.getElementById("${pageName}"));
+    }
+   
   }
 
   ${fetchParams(pageName)}
@@ -77,35 +85,50 @@ export async function generateClientBundle({
     filePath,
     outdir = ".ssr/output/static/",
     pageName,
+    data,
     bundleConstants = {
         bundle: true,
         allowOverwrite: true,
         treeShaking: true,
         minify: true,
-        inject: [join(__dirname, `preact-shim.js`)],
+        //        inject: [join(__dirname, `preact-shim.js`)],
         loader: { ".ts": "ts", ".tsx": "tsx", ".js": "jsx", ".jsx": "jsx" },
         jsx: "automatic",
         legalComments: "none",
         platform: "browser",
         write: false,
     }
-}: { filePath: string; outdir?: string; pageName: string; bundleConstants?: any }) {
+}: { filePath: string; outdir?: string; pageName: string; bundleConstants?: any; data: any }) {
     try {
-        return await build({
+        const pkg = await getProjectPkg();
+
+        const result = await build({
             ...bundleConstants,
             bundle: true,
             minify: true,
             treeShaking: true,
             jsxImportSource: "preact",
             stdin: {
-                contents: getHydrationScript(filePath, pageName),
+                contents: await getHydrationScript(filePath, pageName, data),
                 resolveDir: process.cwd(),
             },
             plugins: [compress({ gzip: true })],
             target: "esnext",
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
+            metafile: true,
             ...watchOnDev,
-        })
+            external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})].filter(x => !x.includes('ryo.js')),
+        });
+
+        if (result.metafile) {
+            let text = await analyzeMetafile(result.metafile, {
+                verbose: true,
+            })
+            console.log(text)
+        }
+
+        return result;
+
     } catch (e) {
         console.error({ e, filePath });
     }

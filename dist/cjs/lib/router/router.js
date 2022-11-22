@@ -1,0 +1,42 @@
+"use strict";
+//@ts-ignore
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var react_1 = require("react");
+function Router() {
+    var _a = (0, react_1.useState)({
+        path: undefined,
+        params: {},
+        isLoading: true,
+        push: function (path) { }
+    }), state = _a[0], setState = _a[1];
+    (0, react_1.useEffect)(function () {
+        if (document) {
+            //@ts-ignore
+            var params_1 = window.fetchParams();
+            setState(function (p) { return (__assign(__assign({}, p), { params: params_1, isLoading: false, push: function (path) {
+                    //@ts-ignore
+                    window.framework.ROUTER.go(path);
+                    //@ts-ignore
+                    setState(function (p) { return (__assign(__assign({}, p), { path: path, params: window.fetchParams() })); });
+                }, back: function () {
+                    //@ts-ignore
+                    window.framework.ROUTER.back();
+                    //@ts-ignore
+                    setState(function (p) { return (__assign(__assign({}, p), { path: window.location.pathname, params: window.fetchParams() })); });
+                } })); });
+        }
+    }, []);
+    return state;
+}
+exports.default = Router;

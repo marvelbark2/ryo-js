@@ -93,10 +93,13 @@ var args = process.argv.slice(2);
                 (0, fs_1.writeFileSync)(jsonReportPath, Buffer.from(data), { flag: "wx" });
                 uws_1 = (0, lib_1.default)("dev");
                 pubsub_1.default.subscribe(function (msg) {
-                    console.log(msg);
-                    if (msg === "restart") {
+                    if (msg.startsWith("restart-")) {
+                        var _a = msg.split("restart-"), _ = _a[0], at = _a[1];
                         uws_1();
                         uws_1 = (0, lib_1.default)("dev");
+                        var now = Date.now();
+                        console.log("Dev compiled at restarted for ".concat(now - (+at), "ms"));
+                        pubsub_1.default.publish("refresh");
                     }
                 });
                 return [3 /*break*/, 9];
