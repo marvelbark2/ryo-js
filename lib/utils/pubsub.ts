@@ -1,8 +1,8 @@
-type StringListener = (value: string) => void;
+type StringListener = (value: string, data?: any) => void;
 
 function createObserver(): {
     subscribe: (listener: StringListener) => () => void;
-    publish: (event: string) => void;
+    publish: StringListener;
 } {
     let listeners: StringListener[] = [];
 
@@ -13,8 +13,8 @@ function createObserver(): {
                 listeners = listeners.filter((l) => l !== listener);
             };
         },
-        publish: (event: string) => {
-            listeners.forEach((l) => l(event));
+        publish: (event: string, data?: any) => {
+            listeners.forEach((l) => l(event, data));
         },
     };
 }

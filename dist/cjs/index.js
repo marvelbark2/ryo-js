@@ -55,7 +55,7 @@ globalThis.register = register_1.default;
 });
 var args = process.argv.slice(2);
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var before, buildReport, data, jsonReportPath, e_1, buildReport, data, jsonReportPath, uws_1;
+    var before, buildReport, data, jsonReportPath, e_1, uws_1, buildReport, data, jsonReportPath, e_2;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -77,15 +77,19 @@ var args = process.argv.slice(2);
                 e_1 = _a.sent();
                 console.error(e_1);
                 return [3 /*break*/, 4];
-            case 4: return [3 /*break*/, 9];
+            case 4: return [3 /*break*/, 12];
             case 5:
                 if (!args.includes("start")) return [3 /*break*/, 6];
                 (0, lib_1.default)();
-                return [3 /*break*/, 9];
+                return [3 /*break*/, 12];
             case 6:
-                if (!args.includes("dev")) return [3 /*break*/, 8];
-                return [4 /*yield*/, (0, build_1.default)()];
+                if (!args.includes("dev")) return [3 /*break*/, 11];
+                uws_1 = null;
+                _a.label = 7;
             case 7:
+                _a.trys.push([7, 9, , 10]);
+                return [4 /*yield*/, (0, build_1.default)()];
+            case 8:
                 buildReport = _a.sent();
                 data = JSON.stringify(buildReport, null, 2);
                 console.log("🕧 Building pages report");
@@ -102,11 +106,19 @@ var args = process.argv.slice(2);
                         pubsub_1.default.publish("refresh");
                     }
                 });
-                return [3 /*break*/, 9];
-            case 8:
+                return [3 /*break*/, 10];
+            case 9:
+                e_2 = _a.sent();
+                console.error(e_2);
+                if (uws_1) {
+                    uws_1();
+                }
+                return [3 /*break*/, 10];
+            case 10: return [3 /*break*/, 12];
+            case 11:
                 console.error("Invalid command");
-                _a.label = 9;
-            case 9: return [2 /*return*/];
+                _a.label = 12;
+            case 12: return [2 /*return*/];
         }
     });
 }); })();

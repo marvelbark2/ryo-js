@@ -9,8 +9,8 @@ function createObserver() {
                 listeners = listeners.filter(function (l) { return l !== listener; });
             };
         },
-        publish: function (event) {
-            listeners.forEach(function (l) { return l(event); });
+        publish: function (event, data) {
+            listeners.forEach(function (l) { return l(event, data); });
         },
     };
 }

@@ -152,7 +152,6 @@ var tsxTransformOptions = {
     format: "esm",
     target: "es2019",
 };
-console.log(isTsConfigFileExists ? tsConfigFile : undefined);
 function buildClient() {
     return __awaiter(this, void 0, void 0, function () {
         var pages, ssrdir, pkg_1, outdir_1, outWSdir_1, allBuilds, error_1;

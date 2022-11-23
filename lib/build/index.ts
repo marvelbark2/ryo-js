@@ -75,7 +75,6 @@ const tsxTransformOptions = {
     format: "esm",
     target: "es2019",
 }
-console.log(isTsConfigFileExists ? tsConfigFile : undefined)
 
 async function buildClient() {
     try {

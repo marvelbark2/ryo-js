@@ -34,14 +34,14 @@ const fetchParams = (pageName: string) => {
 }
 
 const getWSDataReload = (data: any, pageName: string) => {
-    console.log({ data, pageName })
     if (data && data.invalidate)
         return `const ws = new WebSocket('ws://'+ window.location.host + '/${pageName}.data')
         ws.onopen = () => {
         ws.onmessage = (e) => {
             const data = JSON.parse(e.data)
             if(data.type === 'change') {
-                const newElement = createElement(Component, {data: data.payload})
+                const deserializedData = new window.framework.DESERIALIZE(data.payload);
+                const newElement = createElement(Component, {data: deserializedData.fromJSON()})
                 hydrate(newElement, document.getElementById("${pageName}"))
             }
         }
@@ -57,7 +57,9 @@ const getHydrationScript = async (filePath: string, pageName: string, data: any)
   document.getElementById("${pageName}").innerHTML = "";
 
   if(window.getData) {
-    const Element = createElement(Component, {data: JSON.parse(window.getData())});
+    const data = window.getData();
+    const deserializedData = new window.framework.DESERIALIZE(data);
+    const Element = createElement( Component, { data: deserializedData.fromJSON() } );
     const W = h("span", {id: "${pageName}"}, Element);
     if(Parent) {
         const ParentElement = createElement(Parent, {}, W);

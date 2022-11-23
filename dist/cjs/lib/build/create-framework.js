@@ -8,12 +8,14 @@ var path_1 = require("path");
 var esbuild_1 = require("esbuild");
 var esbuild_plugin_gzip_1 = __importDefault(require("@luncheon/esbuild-plugin-gzip"));
 function getScript() {
-    var out = (0, path_1.join)(process.cwd(), ".ssr/output/static", "framework-system.js");
-    var entryPoints = [(0, path_1.join)(__dirname, "ryo-tools.js")];
+    var out = (0, path_1.join)(process.cwd(), ".ssr/output/static", 'framework-system.js');
+    var entryPoints = [];
     if (process.env.NODE_ENV === 'development') {
         entryPoints.push((0, path_1.join)(__dirname, "ryo-tools-dev.js"));
     }
-    ;
+    else {
+        entryPoints.push((0, path_1.join)(__dirname, "ryo-tools.js"));
+    }
     (0, esbuild_1.build)({
         bundle: true,
         entryPoints: entryPoints,
