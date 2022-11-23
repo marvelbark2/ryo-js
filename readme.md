@@ -184,26 +184,37 @@ export default function index({ data }) {
 ```js
 // Path: src/counter.jsx
 // route: /counter
+type CounterDataType = { value: number, date: Date };
 
 let count = 0;
 export const data = {
-    // invalidate each second
     invalidate: 1,
-    shouldUpdate: (_old, newValue) => newValue > 10,
-
-    // async here is not required but if you have async process you need this
-    runner: async (stop) => {
+    shouldUpdate: (_old: CounterDataType, newValue: CounterDataType) => newValue.value > 10,
+    runner: async (stop: () => void) => {
         if (count === 60) {
             stop();
         }
-        return count++;
+        return {
+            value: count++,
+            date: new Date()
+        };
     }
 }
-export default function index({ data }) {
+
+// Parent Layout
+export function Parent({ children }: { children: any }) {
+    return (
+        <div>
+            <h1>Parent</h1>
+            {children}
+        </div>
+    )
+}
+export default function index({ data }: { data: CounterDataType }) {
     return (
         <div>
             <p>
-                COUNTING... {data}
+                COUNTING at {data.date.getTime()} ... {data.value}
             </p>
         </div>
     )
