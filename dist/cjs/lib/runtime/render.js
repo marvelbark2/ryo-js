@@ -725,7 +725,6 @@ var RenderData = /** @class */ (function (_super) {
                                                 cachedData_1.set(pageName, newValue);
                                                 if (shouldUpdate && shouldUpdate(oldValue, newValue)) {
                                                     pubsub_1.default.publish("fetch-".concat(pageName), newValue);
-                                                    console.log("fetch-".concat(pageName), newValue);
                                                 }
                                             }
                                             return [3 /*break*/, 3];

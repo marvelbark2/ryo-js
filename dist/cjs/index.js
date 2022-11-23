@@ -55,7 +55,7 @@ globalThis.register = register_1.default;
 });
 var args = process.argv.slice(2);
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var before, buildReport, data, jsonReportPath, e_1, uws_1, buildReport, data, jsonReportPath, e_2;
+    var before, buildReport, data, jsonReportPath, e_1, uws_1, buildReport, data, jsonReportPath, unsub_1, e_2;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -96,14 +96,14 @@ var args = process.argv.slice(2);
                 jsonReportPath = (0, path_1.join)(process.cwd(), ".ssr/build-report.json");
                 (0, fs_1.writeFileSync)(jsonReportPath, Buffer.from(data), { flag: "wx" });
                 uws_1 = (0, lib_1.default)("dev");
-                pubsub_1.default.subscribe(function (msg) {
-                    if (msg.startsWith("restart-")) {
-                        var _a = msg.split("restart-"), _ = _a[0], at = _a[1];
+                unsub_1 = pubsub_1.default.subscribe(function (msg, at) {
+                    if (msg === "restart" && at) {
                         uws_1();
                         uws_1 = (0, lib_1.default)("dev");
                         var now = Date.now();
-                        console.log("Dev compiled at restarted for ".concat(now - (+at), "ms"));
+                        console.log("Dev compiled at restarted for ".concat(now - at, "ms"));
                         pubsub_1.default.publish("refresh");
+                        unsub_1();
                     }
                 });
                 return [3 /*break*/, 10];

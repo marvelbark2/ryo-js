@@ -42,15 +42,14 @@ const args = process.argv.slice(2);
             const jsonReportPath = join(process.cwd(), ".ssr/build-report.json")
             writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
             uws = server("dev");
-            ps.subscribe((msg) => {
-
-                if (msg.startsWith("restart-")) {
-                    const [_, at] = msg.split("restart-");
+            const unsub = ps.subscribe((msg, at) => {
+                if (msg === "restart" && at) {
                     uws();
                     uws = server("dev");
                     const now = Date.now();
-                    console.log(`Dev compiled at restarted for ${now - (+at)}ms`)
+                    console.log(`Dev compiled at restarted for ${now - at}ms`)
                     ps.publish("refresh")
+                    unsub()
                 }
             })
         } catch (e) {

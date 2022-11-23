@@ -7,7 +7,7 @@ export const watchOnDev = {
             const at = Date.now();
             if (error) console.error("watch build failed: ", error);
             else {
-                ps.publish("restart-" + at);
+                ps.publish("restart", at);
 
                 if (result.outputFiles && result.outputFiles.length > 0)
                     console.log("watch build succeeded: ", result.outputFiles[0].path);

@@ -72,7 +72,7 @@ exports.watchOnDev = {
             if (error)
                 console.error("watch build failed: ", error);
             else {
-                pubsub_1.default.publish("restart-" + at);
+                pubsub_1.default.publish("restart", at);
                 if (result.outputFiles && result.outputFiles.length > 0)
                     console.log("watch build succeeded: ", result.outputFiles[0].path);
                 else {

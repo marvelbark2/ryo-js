@@ -48,6 +48,7 @@ const getWSDataReload = (data: any, pageName: string) => {
         }`
 }
 const getHydrationScript = async (filePath: string, pageName: string, data: any) => `
+    ${process.env.NODE_ENV === "development" ? 'import "preact/debug";' : ""}
   import {hydrate, createElement, h} from "preact"
   import * as Module from "${filePath}";
 
@@ -117,6 +118,7 @@ export async function generateClientBundle({
             plugins: [compress({ gzip: true })],
             target: "esnext",
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
+            keepNames: process.env.NODE_ENV === "development",
             metafile: true,
             ...watchOnDev,
             external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})].filter(x => !x.includes('ryo.js')),
