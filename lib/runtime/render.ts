@@ -93,9 +93,9 @@ export abstract class AbstractRender {
     }
 
     render404() {
-        const { res } = this.options;
+        const { res, pathname } = this.options;
         res.writeStatus("404 Not Found");
-        res.end("404 Not Found");
+        res.end("404 Not Found - page: " + pathname);
     }
 }
 
@@ -458,7 +458,29 @@ export class RenderStatic extends Streamable {
     static MIME_TYPE = {
         "js": "text/javascript",
         "css": "text/css",
-        "html": "text/html"
+        "html": "text/html",
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "gif": "image/gif",
+        "svg": "image/svg+xml",
+        "ico": "image/x-icon",
+        "json": "application/json",
+        "woff": "font/woff",
+        "woff2": "font/woff2",
+        "ttf": "font/ttf",
+        "eot": "font/eot",
+        "otf": "font/otf",
+        "mp4": "video/mp4",
+        "webm": "video/webm",
+        "ogg": "video/ogg",
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+        "webp": "image/webp",
+        "pdf": "application/pdf",
+        "zip": "application/zip",
+        "rar": "application/x-rar-compressed",
+        "txt": "text/plain",
     }
     render() {
         const { res, req, buildReport } = this.options;
@@ -477,7 +499,8 @@ export class RenderStatic extends Streamable {
             }
         }
 
-        if (ext === "js" || ext === "css" || ext === 'html') {
+        if (Object.keys(RenderStatic.MIME_TYPE).includes(ext)) {
+            //@ts-ignore
             const mime = RenderStatic.MIME_TYPE[ext];
             if (mime) {
                 res.writeHeader("Content-Type", mime);

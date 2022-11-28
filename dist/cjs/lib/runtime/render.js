@@ -152,9 +152,9 @@ var AbstractRender = /** @class */ (function () {
         return require(filePath);
     };
     AbstractRender.prototype.render404 = function () {
-        var res = this.options.res;
+        var _a = this.options, res = _a.res, pathname = _a.pathname;
         res.writeStatus("404 Not Found");
-        res.end("404 Not Found");
+        res.end("404 Not Found - page: " + pathname);
     };
     AbstractRender.PWD = process.cwd();
     AbstractRender.RequireCaches = new Set();
@@ -611,7 +611,8 @@ var RenderStatic = /** @class */ (function (_super) {
                 return this.render404();
             }
         }
-        if (ext === "js" || ext === "css" || ext === 'html') {
+        if (Object.keys(RenderStatic.MIME_TYPE).includes(ext)) {
+            //@ts-ignore
             var mime = RenderStatic.MIME_TYPE[ext];
             if (mime) {
                 res.writeHeader("Content-Type", mime);
@@ -652,7 +653,29 @@ var RenderStatic = /** @class */ (function (_super) {
     RenderStatic.MIME_TYPE = {
         "js": "text/javascript",
         "css": "text/css",
-        "html": "text/html"
+        "html": "text/html",
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "gif": "image/gif",
+        "svg": "image/svg+xml",
+        "ico": "image/x-icon",
+        "json": "application/json",
+        "woff": "font/woff",
+        "woff2": "font/woff2",
+        "ttf": "font/ttf",
+        "eot": "font/eot",
+        "otf": "font/otf",
+        "mp4": "video/mp4",
+        "webm": "video/webm",
+        "ogg": "video/ogg",
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+        "webp": "image/webp",
+        "pdf": "application/pdf",
+        "zip": "application/zip",
+        "rar": "application/x-rar-compressed",
+        "txt": "text/plain",
     };
     return RenderStatic;
 }(Streamable));

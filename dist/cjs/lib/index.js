@@ -96,7 +96,7 @@ function server(env) {
             req: req,
             res: res,
             buildReport: buildReport,
-            pathname: path,
+            pathname: path || req.getUrl(),
             isDev: process.env.NODE_ENV === "development",
         };
     };
@@ -135,14 +135,7 @@ function server(env) {
             }
             else if (isApi || !isPage) {
                 app.any(pageName, function (res, req) {
-                    var path = req.getUrl();
-                    var isStaticFile = (0, fs_1.existsSync)((0, path_1.join)(pwd, ".ssr", "output", "static", path));
-                    if (isStaticFile) {
-                        return new render_1.RenderStatic(getRenderProps(res, req, pageServerName));
-                    }
-                    else {
-                        return new render_1.RenderAPI(getRenderProps(res, req, pageServerName));
-                    }
+                    return new render_1.RenderAPI(getRenderProps(res, req, pageServerName));
                 });
             }
             else if (isPage) {

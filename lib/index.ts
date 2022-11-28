@@ -42,7 +42,7 @@ export default function server(env = "production") {
     const getRenderProps = (res: uws.HttpResponse, req: uws.HttpRequest, path = ""): RenderProps => {
         return {
             req, res, buildReport,
-            pathname: path,
+            pathname: path || req.getUrl(),
             isDev: process.env.NODE_ENV === "development",
         }
     }
@@ -79,14 +79,9 @@ export default function server(env = "production") {
                         return new RenderEvent(getRenderProps(res, req, pageServerName))
                     })
                 } else if (isApi || !isPage) {
+
                     app.any(pageName, (res, req) => {
-                        const path = req.getUrl();
-                        const isStaticFile = existsSync(join(pwd, ".ssr", "output", "static", path));
-                        if (isStaticFile) {
-                            return new RenderStatic(getRenderProps(res, req, pageServerName));
-                        } else {
-                            return new RenderAPI(getRenderProps(res, req, pageServerName));
-                        }
+                        return new RenderAPI(getRenderProps(res, req, pageServerName));
                     })
                 } else if (isPage) {
                     app.get(pageName, (res, req) => {

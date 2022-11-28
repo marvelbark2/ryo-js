@@ -13,7 +13,7 @@ import { h, Fragment } from "preact";
 Object.defineProperty(global, 'h', h);
 Object.defineProperty(global, 'Fragment', Fragment);
 
-import { rmSync, existsSync, readFileSync, createReadStream, createWriteStream } from "fs";
+import { rmSync, existsSync, readFileSync, createReadStream, createWriteStream, mkdirSync } from "fs";
 import { join } from "path";
 
 
@@ -140,12 +140,14 @@ function copyPublicFiles() {
     const publicDir = join(process.cwd(), "public");
     const outdir = join(".ssr", "output/static");
     if (existsSync(publicDir)) {
+        if (!existsSync(outdir)) {
+            mkdirSync(outdir, { recursive: true });
+        }
         const files = getPages(publicDir, join);
         files.forEach((file) => {
             const fileName = file.split(publicDir)[1];
             createReadStream(file).pipe(createWriteStream(join(outdir, fileName)));
         })
-
     }
 }
 

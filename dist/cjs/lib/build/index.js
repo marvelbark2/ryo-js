@@ -232,6 +232,9 @@ function copyPublicFiles() {
     var publicDir = (0, path_1.join)(process.cwd(), "public");
     var outdir = (0, path_1.join)(".ssr", "output/static");
     if ((0, fs_1.existsSync)(publicDir)) {
+        if (!(0, fs_1.existsSync)(outdir)) {
+            (0, fs_1.mkdirSync)(outdir, { recursive: true });
+        }
         var files = (0, page_1.getPages)(publicDir, path_1.join);
         files.forEach(function (file) {
             var fileName = file.split(publicDir)[1];
