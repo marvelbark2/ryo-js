@@ -38,11 +38,17 @@ export abstract class AbstractRender {
     static CACHE_BUNDLES = new Map();
 
     constructor(protected readonly options: RenderProps) {
-        if (this.options.isDev) {
+        /**
+         * TODO: Handle Dev env
+         * 
+         * if (this.options.isDev) {
             this.renderDev();
         } else {
-            this.render();
+             this.render();
         }
+         */
+
+        this.render();
     }
 
     abstract render(): void;

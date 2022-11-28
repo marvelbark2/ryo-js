@@ -35,13 +35,14 @@ const fetchParams = (pageName: string) => {
 
 const getWSDataReload = (data: any, pageName: string) => {
     if (data && data.invalidate)
-        return `const ws = new WebSocket('ws://'+ window.location.host + '/${pageName}.data')
+        return `
+        const ws = new WebSocket('ws://'+ window.location.host + '/${pageName}.data')
         ws.onopen = () => {
         ws.onmessage = (e) => {
             const data = JSON.parse(e.data)
             if(data.type === 'change') {
                 const deserializedData = new window.framework.DESERIALIZE(data.payload);
-                const newElement = createElement(Component, {data: deserializedData.fromJSON()})
+                const newElement = h(Component, {data: deserializedData.fromJSON()})
                 hydrate(newElement, document.getElementById("${pageName}"))
             }
         }
@@ -49,33 +50,33 @@ const getWSDataReload = (data: any, pageName: string) => {
 }
 const getHydrationScript = async (filePath: string, pageName: string, data: any) => `
     ${process.env.NODE_ENV === "development" ? 'import "preact/debug";' : ""}
-  import {hydrate, createElement, h} from "preact"
+  import {hydrate, h, render} from "preact"
   import * as Module from "${filePath}";
 
   const Component = Module.default || Module;
-  const Parent = Module.Parent;
+  const Parent =  Module.Parent;
 
   document.getElementById("${pageName}").innerHTML = "";
 
   if(window.getData) {
     const data = window.getData();
     const deserializedData = new window.framework.DESERIALIZE(data);
-    const Element = createElement( Component, { data: deserializedData.fromJSON() } );
+    const Element = h( Component, { data: deserializedData.fromJSON() } );
     const W = h("span", {id: "${pageName}"}, Element);
     if(Parent) {
-        const ParentElement = createElement(Parent, {}, W);
-        hydrate(ParentElement, document.getElementById("root"))
+        const ParentElement = h(Parent, {}, W);
+        render(ParentElement, document.getElementById("root"))
     } else {
-        hydrate(Element, document.getElementById("${pageName}"))
+        render(Element, document.getElementById("${pageName}"))
     }
     ${getWSDataReload(data, pageName)}
   } else {
     if(Parent) {
-        const Element = createElement(Component)
-        const ParentElement = createElement(Parent, {id: '${pageName}'}, Element);
+        const Element = h(Component)
+        const ParentElement = h(Parent, {id: '${pageName}'}, Element);
         hydrate(ParentElement, document.getElementById("root"))
     } else {
-        const Element = createElement(Component);
+        const Element = h(Component);
         hydrate(Element, document.getElementById("${pageName}"));
     }
    
@@ -94,34 +95,31 @@ export async function generateClientBundle({
         allowOverwrite: true,
         treeShaking: true,
         minify: true,
-        //        inject: [join(__dirname, `preact-shim.js`)],
-        loader: { ".ts": "ts", ".tsx": "tsx", ".js": "jsx", ".jsx": "jsx" },
+        loader: { ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx" },
         jsx: "automatic",
+        jsxFactory: "h",
+        jsxFragment: "Fragment",
         legalComments: "none",
         platform: "browser",
         write: false,
     }
 }: { filePath: string; outdir?: string; pageName: string; bundleConstants?: any; data: any }) {
     try {
-        const pkg = await getProjectPkg();
-
         const result = await build({
             ...bundleConstants,
-            bundle: true,
-            minify: true,
-            treeShaking: true,
             jsxImportSource: "preact",
             stdin: {
                 contents: await getHydrationScript(filePath, pageName, data),
                 resolveDir: process.cwd(),
             },
+            target: "es2020",
+            format: "esm",
             plugins: [compress({ gzip: true })],
-            target: "esnext",
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
-            keepNames: process.env.NODE_ENV === "development",
+            keepNames: /**process.env.NODE_ENV === "development" */ true,
             metafile: true,
+            tsconfig: join(process.cwd(), "tsconfig.json"),
             ...watchOnDev,
-            external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})].filter(x => !x.includes('ryo.js')),
         });
 
         if (result.metafile) {

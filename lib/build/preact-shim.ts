@@ -1,3 +1,3 @@
-import { createElement, render, h } from "preact";
+import * as preact from "preact";
 
-export default { createElement, render, h };
+export { preact };

@@ -11,7 +11,7 @@ npm i @luncheon/esbuild-plugin-gzip babel-preset-preact -D
 
 ## Features:
 - Routing based filesystem
-- Blazly fast 
+- Blazly fast (Try it by yourself :) )
 - Everything on src folder
 - Create apis, websockets, server files and preact components
 - SPA routing which makes the site so fast (Using Flamethrower)

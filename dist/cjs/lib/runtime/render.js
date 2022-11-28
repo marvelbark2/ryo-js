@@ -100,13 +100,17 @@ var serializer_1 = require("../utils/serializer");
 var pubsub_1 = __importDefault(require("../utils/pubsub"));
 var AbstractRender = /** @class */ (function () {
     function AbstractRender(options) {
-        this.options = options;
-        if (this.options.isDev) {
+        /**
+         * TODO: Handle Dev env
+         *
+         * if (this.options.isDev) {
             this.renderDev();
+        } else {
+             this.render();
         }
-        else {
-            this.render();
-        }
+         */
+        this.options = options;
+        this.render();
     }
     AbstractRender.ClearCache = function () {
         AbstractRender.CACHE_API_METHODS.clear();
