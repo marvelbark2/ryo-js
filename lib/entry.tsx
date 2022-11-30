@@ -1,10 +1,5 @@
 
-import { useEffect } from 'preact/hooks';
-
 const EntryClient = ({ children, id }: any) => {
-    useEffect(() => {
-        console.log("🚀 ~ file: entry.tsx ~ line 6 ~ useEffect ~ useEffect", useEffect)
-    }, [])
     return (
         <div>
             <h1>WRAPPED </h1>

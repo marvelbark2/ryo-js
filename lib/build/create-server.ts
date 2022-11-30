@@ -8,15 +8,15 @@ export async function generateServerScript({
     comp,
     outdir = ".ssr/output/data/",
     pageName,
+    tsConfig,
     bundleConstants = {
         treeShaking: true,
         minify: true,
         loader: { ".ts": "ts", ".js": "js" },
     }
-}: { comp: any; outdir?: string; pageName: string; bundleConstants?: any }) {
+}: { comp: any; outdir?: string; pageName: string; bundleConstants?: any, tsConfig?: string }) {
     const isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
     const out = join(outdir, isWS ? "ws" : ".", `${pageName}.js`)
-    const tsConfig = join(process.cwd(), "tsconfig.json");
 
     const pkg = await getProjectPkg();
     return build({
@@ -27,7 +27,7 @@ export async function generateServerScript({
         format: "esm",
         platform: "node",
         outfile: out,
-        tsconfig: existsSync(tsConfig) ? tsConfig : undefined,
+        tsconfig: tsConfig,
         allowOverwrite: true,
         external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {})],
         ...watchOnDev,

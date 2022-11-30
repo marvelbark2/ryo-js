@@ -48,13 +48,12 @@ const getWSDataReload = (data: any, pageName: string) => {
         }
         }`
 }
-const getHydrationScript = async (filePath: string, pageName: string, data: any) => `
+const getHydrationScript = async (filePath: string, pageName: string, data: any, parent: any) => `
     ${process.env.NODE_ENV === "development" ? 'import "preact/debug";' : ""}
   import {hydrate, h, render} from "preact"
-  import * as Module from "${filePath}";
-
-  const Component = Module.default || Module;
-  const Parent =  Module.Parent;
+  ${parent ? `import Component, { Parent } from "${filePath}"` :
+        `import Component from "${filePath}";
+      const Parent = undefined;`}
 
   document.getElementById("${pageName}").innerHTML = "";
 
@@ -87,9 +86,10 @@ const getHydrationScript = async (filePath: string, pageName: string, data: any)
 
 export async function generateClientBundle({
     filePath,
-    outdir = ".ssr/output/static/",
+    tsconfig,
     pageName,
     data,
+    parent,
     bundleConstants = {
         bundle: true,
         allowOverwrite: true,
@@ -103,13 +103,13 @@ export async function generateClientBundle({
         platform: "browser",
         write: false,
     }
-}: { filePath: string; outdir?: string; pageName: string; bundleConstants?: any; data: any }) {
+}: { filePath: string; outdir?: string; pageName: string; bundleConstants?: any; data: any; parent?: any, tsconfig?: string }) {
     try {
         const result = await build({
             ...bundleConstants,
             jsxImportSource: "preact",
             stdin: {
-                contents: await getHydrationScript(filePath, pageName, data),
+                contents: await getHydrationScript(filePath, pageName, data, parent),
                 resolveDir: process.cwd(),
             },
             target: "es2020",
@@ -118,7 +118,7 @@ export async function generateClientBundle({
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
             keepNames: /**process.env.NODE_ENV === "development" */ true,
             metafile: true,
-            tsconfig: join(process.cwd(), "tsconfig.json"),
+            tsconfig,
             ...watchOnDev,
         });
 

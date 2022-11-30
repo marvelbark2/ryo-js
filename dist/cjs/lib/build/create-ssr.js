@@ -39,7 +39,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateSSRPages = void 0;
 var path_1 = require("path");
 var esbuild_1 = require("esbuild");
-function getScript(outdir, pageName, path) {
+function getScript(outdir, pageName, path, tsConfig) {
     return __awaiter(this, void 0, void 0, function () {
         var outFunc;
         var _a;
@@ -57,6 +57,7 @@ function getScript(outdir, pageName, path) {
                             splitting: true,
                             jsxFactory: 'h',
                             jsxFragment: 'Fragment',
+                            tsconfig: tsConfig,
                         })];
                 case 1: return [2 /*return*/, _b.sent()];
             }
@@ -64,14 +65,14 @@ function getScript(outdir, pageName, path) {
     });
 }
 function generateSSRPages(_a) {
-    var path = _a.path, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/data/" : _b, pageName = _a.pageName;
+    var path = _a.path, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/data/" : _b, pageName = _a.pageName, tsConfig = _a.tsConfig;
     return __awaiter(this, void 0, void 0, function () {
         var e_1;
         return __generator(this, function (_c) {
             switch (_c.label) {
                 case 0:
                     _c.trys.push([0, 2, , 3]);
-                    return [4 /*yield*/, getScript(outdir, pageName, path)];
+                    return [4 /*yield*/, getScript(outdir, pageName, path, tsConfig)];
                 case 1: return [2 /*return*/, _c.sent()];
                 case 2:
                     e_1 = _c.sent();

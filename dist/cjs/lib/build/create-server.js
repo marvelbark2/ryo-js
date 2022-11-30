@@ -59,26 +59,24 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateServerScript = void 0;
 var path_1 = require("path");
 var esbuild_1 = require("esbuild");
-var fs_1 = require("fs");
 var global_1 = require("../utils/global");
 function generateServerScript(_a) {
-    var comp = _a.comp, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/data/" : _b, pageName = _a.pageName, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
+    var comp = _a.comp, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/data/" : _b, pageName = _a.pageName, tsConfig = _a.tsConfig, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
         treeShaking: true,
         minify: true,
         loader: { ".ts": "ts", ".js": "js" },
     } : _c;
     return __awaiter(this, void 0, void 0, function () {
-        var isWS, out, tsConfig, pkg;
+        var isWS, out, pkg;
         return __generator(this, function (_d) {
             switch (_d.label) {
                 case 0:
                     isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
                     out = (0, path_1.join)(outdir, isWS ? "ws" : ".", "".concat(pageName, ".js"));
-                    tsConfig = (0, path_1.join)(process.cwd(), "tsconfig.json");
                     return [4 /*yield*/, (0, global_1.getProjectPkg)()];
                 case 1:
                     pkg = _d.sent();
-                    return [2 /*return*/, (0, esbuild_1.build)(__assign(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", platform: "node", outfile: out, tsconfig: (0, fs_1.existsSync)(tsConfig) ? tsConfig : undefined, allowOverwrite: true, external: __spreadArray(__spreadArray([], Object.keys(pkg.dependencies || {}), true), Object.keys(pkg.peerDependencies || {}), true) }), global_1.watchOnDev)).then(function (result) {
+                    return [2 /*return*/, (0, esbuild_1.build)(__assign(__assign(__assign({}, bundleConstants), { entryPoints: [comp], bundle: true, target: "node14", format: "esm", platform: "node", outfile: out, tsconfig: tsConfig, allowOverwrite: true, external: __spreadArray(__spreadArray([], Object.keys(pkg.dependencies || {}), true), Object.keys(pkg.peerDependencies || {}), true) }), global_1.watchOnDev)).then(function (result) {
                             if (result.errors.length > 0) {
                                 console.error(result.errors);
                             }

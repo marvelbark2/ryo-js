@@ -1,7 +1,7 @@
 import { join } from "path";
 import { build } from "esbuild";
 
-async function getScript(outdir: string, pageName: string, path: string) {
+async function getScript(outdir: string, pageName: string, path: string, tsConfig?: string) {
     const outFunc = join(outdir, "pages")
 
     return await build({
@@ -14,15 +14,17 @@ async function getScript(outdir: string, pageName: string, path: string) {
         splitting: true,
         jsxFactory: 'h',
         jsxFragment: 'Fragment',
+        tsconfig: tsConfig,
     })
 }
 export async function generateSSRPages({
     path,
     outdir = ".ssr/output/data/",
     pageName,
-}: { path: string, outdir?: string; pageName: string; }) {
+    tsConfig
+}: { path: string, outdir?: string; pageName: string; tsConfig?: string }) {
     try {
-        return await getScript(outdir, pageName, path);
+        return await getScript(outdir, pageName, path, tsConfig);
     } catch (e) {
         throw e;
     }

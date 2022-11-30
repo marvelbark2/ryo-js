@@ -1,7 +1,8 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.13",
+  "version": "0.0.0-meme.14",
   "description": "Fullstack framework",
+  "sideEffects": false,
   "scripts": {
     "start": "node lib/index.module.js",
     "build:app": "node ./lib/build/index.mjs",

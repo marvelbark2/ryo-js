@@ -66,13 +66,14 @@ var getWSDataReload = function (data, pageName) {
     if (data && data.invalidate)
         return "\n        const ws = new WebSocket('ws://'+ window.location.host + '/".concat(pageName, ".data')\n        ws.onopen = () => {\n        ws.onmessage = (e) => {\n            const data = JSON.parse(e.data)\n            if(data.type === 'change') {\n                const deserializedData = new window.framework.DESERIALIZE(data.payload);\n                const newElement = h(Component, {data: deserializedData.fromJSON()})\n                hydrate(newElement, document.getElementById(\"").concat(pageName, "\"))\n            }\n        }\n        }");
 };
-var getHydrationScript = function (filePath, pageName, data) { return __awaiter(void 0, void 0, void 0, function () {
+var getHydrationScript = function (filePath, pageName, data, parent) { return __awaiter(void 0, void 0, void 0, function () {
     return __generator(this, function (_a) {
-        return [2 /*return*/, "\n    ".concat(process.env.NODE_ENV === "development" ? 'import "preact/debug";' : "", "\n  import {hydrate, h, render} from \"preact\"\n  import * as Module from \"").concat(filePath, "\";\n\n  const Component = Module.default || Module;\n  const Parent =  Module.Parent;\n\n  document.getElementById(\"").concat(pageName, "\").innerHTML = \"\";\n\n  if(window.getData) {\n    const data = window.getData();\n    const deserializedData = new window.framework.DESERIALIZE(data);\n    const Element = h( Component, { data: deserializedData.fromJSON() } );\n    const W = h(\"span\", {id: \"").concat(pageName, "\"}, Element);\n    if(Parent) {\n        const ParentElement = h(Parent, {}, W);\n        render(ParentElement, document.getElementById(\"root\"))\n    } else {\n        render(Element, document.getElementById(\"").concat(pageName, "\"))\n    }\n    ").concat(getWSDataReload(data, pageName), "\n  } else {\n    if(Parent) {\n        const Element = h(Component)\n        const ParentElement = h(Parent, {id: '").concat(pageName, "'}, Element);\n        hydrate(ParentElement, document.getElementById(\"root\"))\n    } else {\n        const Element = h(Component);\n        hydrate(Element, document.getElementById(\"").concat(pageName, "\"));\n    }\n   \n  }\n\n  ").concat(fetchParams(pageName), "\n")];
+        return [2 /*return*/, "\n    ".concat(process.env.NODE_ENV === "development" ? 'import "preact/debug";' : "", "\n  import {hydrate, h, render} from \"preact\"\n  ").concat(parent ? "import Component, { Parent } from \"".concat(filePath, "\"") :
+                "import Component from \"".concat(filePath, "\";\n      const Parent = undefined;"), "\n\n  document.getElementById(\"").concat(pageName, "\").innerHTML = \"\";\n\n  if(window.getData) {\n    const data = window.getData();\n    const deserializedData = new window.framework.DESERIALIZE(data);\n    const Element = h( Component, { data: deserializedData.fromJSON() } );\n    const W = h(\"span\", {id: \"").concat(pageName, "\"}, Element);\n    if(Parent) {\n        const ParentElement = h(Parent, {}, W);\n        render(ParentElement, document.getElementById(\"root\"))\n    } else {\n        render(Element, document.getElementById(\"").concat(pageName, "\"))\n    }\n    ").concat(getWSDataReload(data, pageName), "\n  } else {\n    if(Parent) {\n        const Element = h(Component)\n        const ParentElement = h(Parent, {id: '").concat(pageName, "'}, Element);\n        hydrate(ParentElement, document.getElementById(\"root\"))\n    } else {\n        const Element = h(Component);\n        hydrate(Element, document.getElementById(\"").concat(pageName, "\"));\n    }\n   \n  }\n\n  ").concat(fetchParams(pageName), "\n")];
     });
 }); };
 function generateClientBundle(_a) {
-    var filePath = _a.filePath, _b = _a.outdir, outdir = _b === void 0 ? ".ssr/output/static/" : _b, pageName = _a.pageName, data = _a.data, _c = _a.bundleConstants, bundleConstants = _c === void 0 ? {
+    var filePath = _a.filePath, tsconfig = _a.tsconfig, pageName = _a.pageName, data = _a.data, parent = _a.parent, _b = _a.bundleConstants, bundleConstants = _b === void 0 ? {
         bundle: true,
         allowOverwrite: true,
         treeShaking: true,
@@ -84,35 +85,35 @@ function generateClientBundle(_a) {
         legalComments: "none",
         platform: "browser",
         write: false,
-    } : _c;
+    } : _b;
     return __awaiter(this, void 0, void 0, function () {
-        var result, _d, _e, text, e_1;
-        var _f, _g;
-        return __generator(this, function (_h) {
-            switch (_h.label) {
+        var result, _c, _d, text, e_1;
+        var _e, _f;
+        return __generator(this, function (_g) {
+            switch (_g.label) {
                 case 0:
-                    _h.trys.push([0, 5, , 6]);
-                    _d = esbuild_1.build;
-                    _e = [__assign({}, bundleConstants)];
-                    _f = { jsxImportSource: "preact" };
-                    _g = {};
-                    return [4 /*yield*/, getHydrationScript(filePath, pageName, data)];
-                case 1: return [4 /*yield*/, _d.apply(void 0, [__assign.apply(void 0, [__assign.apply(void 0, _e.concat([(_f.stdin = (_g.contents = _h.sent(),
-                                    _g.resolveDir = process.cwd(),
-                                    _g), _f.target = "es2020", _f.format = "esm", _f.plugins = [(0, esbuild_plugin_gzip_1.default)({ gzip: true })], _f.outfile = (0, path_1.join)(".ssr/output/static", "".concat(pageName, ".bundle.js")), _f.keepNames = true, _f.metafile = true, _f.tsconfig = (0, path_1.join)(process.cwd(), "tsconfig.json"), _f)])), global_1.watchOnDev])])];
+                    _g.trys.push([0, 5, , 6]);
+                    _c = esbuild_1.build;
+                    _d = [__assign({}, bundleConstants)];
+                    _e = { jsxImportSource: "preact" };
+                    _f = {};
+                    return [4 /*yield*/, getHydrationScript(filePath, pageName, data, parent)];
+                case 1: return [4 /*yield*/, _c.apply(void 0, [__assign.apply(void 0, [__assign.apply(void 0, _d.concat([(_e.stdin = (_f.contents = _g.sent(),
+                                    _f.resolveDir = process.cwd(),
+                                    _f), _e.target = "es2020", _e.format = "esm", _e.plugins = [(0, esbuild_plugin_gzip_1.default)({ gzip: true })], _e.outfile = (0, path_1.join)(".ssr/output/static", "".concat(pageName, ".bundle.js")), _e.keepNames = true, _e.metafile = true, _e.tsconfig = tsconfig, _e)])), global_1.watchOnDev])])];
                 case 2:
-                    result = _h.sent();
+                    result = _g.sent();
                     if (!result.metafile) return [3 /*break*/, 4];
                     return [4 /*yield*/, (0, esbuild_1.analyzeMetafile)(result.metafile, {
                             verbose: true,
                         })];
                 case 3:
-                    text = _h.sent();
+                    text = _g.sent();
                     console.log(text);
-                    _h.label = 4;
+                    _g.label = 4;
                 case 4: return [2 /*return*/, result];
                 case 5:
-                    e_1 = _h.sent();
+                    e_1 = _g.sent();
                     console.error({ e: e_1, filePath: filePath });
                     return [3 /*break*/, 6];
                 case 6: return [2 /*return*/];

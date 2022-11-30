@@ -15,7 +15,7 @@ interface Special {
 class ObjectHandler {
     constructor(private object: any) { }
     isArray() {
-        return Array.isArray(this.object);
+        return Array.isArray(this.object) || this.object instanceof Array;
     }
 
     isObject() {
@@ -133,7 +133,9 @@ export class Serializer {
             if (special) {
                 json = special.serialize(val);
                 const currentNodeHandler = new ObjectHandler(val);
-                if (currentNodeHandler.isArray() || currentNodeHandler.isObject())
+                if (currentNodeHandler.isArray()) {
+                    json = val.map((item: any) => this.handleValue(item));
+                } else if (currentNodeHandler.isObject())
                     json = this.handleValue(val);
             }
         }
@@ -157,18 +159,23 @@ export class Deserializer {
 
     private handleNode(node: any): any {
         var obj;
-        if (node.$class) {
+        if (node && node.$class) {
             const special = this.specials.byClass(node.$class);
             if (special) obj = special.deserialize(node);
         }
         const currentNodeHandler = new ObjectHandler(node);
-        if (currentNodeHandler.isArray() || currentNodeHandler.isObject())
+
+        if (currentNodeHandler.isArray()) {
+            obj = node.map((item: any) => this.handleNode(item));
+        }
+        else if (currentNodeHandler.isObject())
             obj = this.handleNode(obj);
 
         return obj ? obj : node;
     }
     fromJSON() {
         const object = this.objectHandler;
+        if (object.isArray()) return object.map((node: any) => this.handleNode(node));
         return object.map((node: any) => this.handleNode(node));
     }
 }

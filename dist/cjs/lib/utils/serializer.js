@@ -15,7 +15,7 @@ var ObjectHandler = /** @class */ (function () {
         this.object = object;
     }
     ObjectHandler.prototype.isArray = function () {
-        return Array.isArray(this.object);
+        return Array.isArray(this.object) || this.object instanceof Array;
     };
     ObjectHandler.prototype.isObject = function () {
         //detect only simple objects
@@ -118,6 +118,7 @@ var Serializer = /** @class */ (function () {
         this.objectHandler = new ObjectHandler(object);
     }
     Serializer.prototype.handleValue = function (val) {
+        var _this = this;
         var json;
         if (val) {
             var specials = this.specials;
@@ -125,7 +126,10 @@ var Serializer = /** @class */ (function () {
             if (special) {
                 json = special.serialize(val);
                 var currentNodeHandler = new ObjectHandler(val);
-                if (currentNodeHandler.isArray() || currentNodeHandler.isObject())
+                if (currentNodeHandler.isArray()) {
+                    json = val.map(function (item) { return _this.handleValue(item); });
+                }
+                else if (currentNodeHandler.isObject())
                     json = this.handleValue(val);
             }
         }
@@ -147,20 +151,26 @@ var Deserializer = /** @class */ (function () {
         this.objectHandler = new ObjectHandler(JSON.parse(json));
     }
     Deserializer.prototype.handleNode = function (node) {
+        var _this = this;
         var obj;
-        if (node.$class) {
+        if (node && node.$class) {
             var special = this.specials.byClass(node.$class);
             if (special)
                 obj = special.deserialize(node);
         }
         var currentNodeHandler = new ObjectHandler(node);
-        if (currentNodeHandler.isArray() || currentNodeHandler.isObject())
+        if (currentNodeHandler.isArray()) {
+            obj = node.map(function (item) { return _this.handleNode(item); });
+        }
+        else if (currentNodeHandler.isObject())
             obj = this.handleNode(obj);
         return obj ? obj : node;
     };
     Deserializer.prototype.fromJSON = function () {
         var _this = this;
         var object = this.objectHandler;
+        if (object.isArray())
+            return object.map(function (node) { return _this.handleNode(node); });
         return object.map(function (node) { return _this.handleNode(node); });
     };
     return Deserializer;

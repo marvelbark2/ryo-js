@@ -10,29 +10,6 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -78,6 +55,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     }
     return to.concat(ar || Array.prototype.slice.call(from));
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createStaticFile = void 0;
 var path_1 = require("path");
@@ -87,9 +67,9 @@ var preact_render_to_string_1 = require("preact-render-to-string");
 var preact_1 = require("preact");
 var esbuild_1 = require("esbuild");
 var global_js_1 = require("../utils/global.js");
-var entry_1 = __importStar(require("../entry"));
+var entry_1 = __importDefault(require("../entry"));
 var projectPkg = (0, global_js_1.getProjectPkg)();
-function generateData(filePath, pageName) {
+function generateData(filePath, pageName, tsconfig) {
     return __awaiter(this, void 0, void 0, function () {
         var pkg, result, text;
         return __generator(this, function (_a) {
@@ -97,7 +77,10 @@ function generateData(filePath, pageName) {
                 case 0: return [4 /*yield*/, projectPkg];
                 case 1:
                     pkg = _a.sent();
-                    return [4 /*yield*/, (0, esbuild_1.build)(__assign({ entryPoints: [filePath], bundle: true, format: "esm", treeShaking: true, external: __spreadArray(__spreadArray(__spreadArray([], Object.keys(pkg.dependencies || {}), true), Object.keys(pkg.peerDependencies || {}), true), Object.keys(pkg.devDependencies || {}), true).filter(function (x) { return !x.includes('ryo.js'); }), metafile: true, outfile: (0, path_1.join)(".ssr/output/server/data", "".concat(pageName, ".data.js")) }, global_js_1.watchOnDev))];
+                    return [4 /*yield*/, (0, esbuild_1.build)(__assign({ stdin: {
+                                contents: "\n        import { data } from \"".concat(filePath, "\";\n        export { data };\n      "),
+                                resolveDir: process.cwd(),
+                            }, bundle: true, format: "esm", treeShaking: true, metafile: true, minify: true, outfile: (0, path_1.join)(".ssr/output/server/data", "".concat(pageName, ".data.js")), tsconfig: tsconfig, platform: "node", external: __spreadArray(__spreadArray(__spreadArray([], Object.keys(pkg.dependencies || {}), true), Object.keys(pkg.peerDependencies || {}), true), Object.keys(pkg.devDependencies || {}), true).filter(function (x) { return !x.includes('ryo.js'); }) }, global_js_1.watchOnDev))];
                 case 2:
                     result = _a.sent();
                     if (!result.metafile) return [3 /*break*/, 4];
@@ -113,10 +96,10 @@ function generateData(filePath, pageName) {
         });
     });
 }
-function createStaticFile(Component, filePath, pageName, options) {
+function createStaticFile(Component, filePath, pageName, tsconfig, options) {
     if (options === void 0) { options = { bundle: true, data: false, outdir: ".ssr/output/static", fileName: undefined }; }
     return __awaiter(this, void 0, void 0, function () {
-        var outdir, App, ParentLayout, data, Element_1, Parent, error_1;
+        var outdir, Wrapper_1, App, ParentLayout, data, Element_1, Parent, error_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -124,8 +107,9 @@ function createStaticFile(Component, filePath, pageName, options) {
                     _a.label = 1;
                 case 1:
                     _a.trys.push([1, 10, , 11]);
+                    Wrapper_1 = (0, fs_1.existsSync)((0, path_1.join)(process.cwd(), "entry.jsx")) ? require((0, path_1.join)(process.cwd(), "entry.jsx")).default : entry_1.default;
                     App = Component.default || Component;
-                    ParentLayout = Component.Parent || entry_1.default;
+                    ParentLayout = Component.Parent || Wrapper_1;
                     data = null;
                     if (!((options === null || options === void 0 ? void 0 : options.data) && Component.data)) return [3 /*break*/, 6];
                     if (!(typeof Component.data === "function")) return [3 /*break*/, 2];
@@ -137,19 +121,19 @@ function createStaticFile(Component, filePath, pageName, options) {
                 case 3:
                     data = _a.sent();
                     _a.label = 4;
-                case 4: return [4 /*yield*/, generateData(filePath, pageName)];
+                case 4: return [4 /*yield*/, generateData(filePath, pageName, tsconfig)];
                 case 5:
                     _a.sent();
                     _a.label = 6;
                 case 6:
                     if (!(options === null || options === void 0 ? void 0 : options.bundle)) return [3 /*break*/, 8];
-                    return [4 /*yield*/, (0, bundler_component_js_1.generateClientBundle)({ filePath: filePath, outdir: outdir, pageName: pageName, data: Component.data })];
+                    return [4 /*yield*/, (0, bundler_component_js_1.generateClientBundle)({ filePath: filePath, outdir: outdir, pageName: pageName, tsconfig: tsconfig, data: Component.data, parent: Component.Parent })];
                 case 7:
                     _a.sent();
                     _a.label = 8;
                 case 8:
                     Element_1 = (0, preact_1.h)(App, { data: data !== null && data !== void 0 ? data : null }, null);
-                    Parent = (0, preact_1.createElement)(entry_1.Wrapper, { Parent: ParentLayout, Child: Element_1, id: pageName }, Element_1);
+                    Parent = (0, preact_1.createElement)(Wrapper_1, { Parent: ParentLayout, Child: Element_1, id: pageName }, Element_1);
                     return [4 /*yield*/, (0, esbuild_1.build)({
                             bundle: true,
                             minify: true,

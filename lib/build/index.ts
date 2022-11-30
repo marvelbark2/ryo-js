@@ -30,6 +30,12 @@ import { getProjectPkg } from "../utils/global";
 
 const buildReport: any = {};
 
+const tsConfigFile = join(process.cwd(), "tsconfig.json");
+const isTsConfigFileExists = existsSync(tsConfigFile);
+
+const tsConfig = isTsConfigFileExists ? tsConfigFile : undefined;
+
+
 
 function generateFrameworkJSBundle() {
     console.log("🕧 Building framework bundle");
@@ -51,10 +57,10 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
         if (keys.includes("server")) {
             buildReport['/' + pageName] = "server";
             console.timeEnd("🕧 Building: " + pageName);
-            return await generateSSRPages({ outdir: outWSdir, pageName, path: page });
+            return await generateSSRPages({ outdir: outWSdir, pageName, path: page, tsConfig });
         }
         console.timeEnd("🕧 Building: " + pageName);
-        return await createStaticFile(Component, page, pageName, { outdir, bundle: true, data: keys.includes("data") });
+        return await createStaticFile(Component, page, pageName, tsConfig, { outdir, bundle: true, data: keys.includes("data") });
     } else {
         if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
             buildReport['/' + pageName] = "api";
@@ -67,9 +73,6 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
         return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
     }
 }
-
-const tsConfigFile = join(process.cwd(), "tsconfig.json");
-const isTsConfigFileExists = existsSync(tsConfigFile);
 const tsxTransformOptions = {
     minify: true,
     format: "esm",

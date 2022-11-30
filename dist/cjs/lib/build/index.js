@@ -102,6 +102,9 @@ var esbuild_1 = require("esbuild");
 var module_from_string_1 = require("module-from-string");
 var global_1 = require("../utils/global");
 var buildReport = {};
+var tsConfigFile = (0, path_1.join)(process.cwd(), "tsconfig.json");
+var isTsConfigFileExists = (0, fs_1.existsSync)(tsConfigFile);
+var tsConfig = isTsConfigFileExists ? tsConfigFile : undefined;
 function generateFrameworkJSBundle() {
     console.log("🕧 Building framework bundle");
     (0, create_framework_1.generateFramework)();
@@ -123,11 +126,11 @@ var buildComponent = function (Component, page, pageName, outdir, outWSdir) { re
                 if (!keys.includes("server")) return [3 /*break*/, 2];
                 buildReport['/' + pageName] = "server";
                 console.timeEnd("🕧 Building: " + pageName);
-                return [4 /*yield*/, (0, create_ssr_1.generateSSRPages)({ outdir: outWSdir, pageName: pageName, path: page })];
+                return [4 /*yield*/, (0, create_ssr_1.generateSSRPages)({ outdir: outWSdir, pageName: pageName, path: page, tsConfig: tsConfig })];
             case 1: return [2 /*return*/, _a.sent()];
             case 2:
                 console.timeEnd("🕧 Building: " + pageName);
-                return [4 /*yield*/, (0, create_static_1.createStaticFile)(Component, page, pageName, { outdir: outdir, bundle: true, data: keys.includes("data") })];
+                return [4 /*yield*/, (0, create_static_1.createStaticFile)(Component, page, pageName, tsConfig, { outdir: outdir, bundle: true, data: keys.includes("data") })];
             case 3: return [2 /*return*/, _a.sent()];
             case 4:
                 if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
@@ -145,8 +148,6 @@ var buildComponent = function (Component, page, pageName, outdir, outWSdir) { re
         }
     });
 }); };
-var tsConfigFile = (0, path_1.join)(process.cwd(), "tsconfig.json");
-var isTsConfigFileExists = (0, fs_1.existsSync)(tsConfigFile);
 var tsxTransformOptions = {
     minify: true,
     format: "esm",
