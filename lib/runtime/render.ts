@@ -4,7 +4,7 @@ import { join } from 'path';
 import { createElement } from 'preact';
 import { render as preactRender } from "preact-render-to-string";
 import { PassThrough, Readable } from 'stream';
-import { createReadStream } from 'fs';
+import { createReadStream, statSync } from 'fs';
 import { gzip } from 'zlib';
 
 import { generateClientBundle } from './transpilor';
@@ -506,24 +506,10 @@ export class RenderStatic extends Streamable {
                 res.writeHeader("Content-Type", mime);
                 if (ext === 'js')
                     res.writeHeader("Content-Encoding", "gzip");
-                const cachedBundles = AbstractRender.CACHE_BUNDLES;
-                const isBundle = path.endsWith(".bundle.js");
-                if (isBundle && cachedBundles.has(path)) {
-                    const cachedStream = cachedBundles.get(path);
-                    cachedBundles.set(path, cachedStream.pipe(new PassThrough()));
-                    return this.pipeStreamOverResponse(res, cachedStream, cachedStream.bytesRead);
-                }
+
                 const filePath = join(AbstractRender.PWD, ".ssr", "output", "static", `${path}${ext === 'js' ? '.gz' : ''}`);
                 const stream = createReadStream(filePath);
                 const size = stream.bytesRead;
-                if (isBundle) {
-                    try {
-                        const clonedStream = stream.pipe(new PassThrough());
-                        cachedBundles.set(path, clonedStream);
-                    } catch (error) {
-                        console.error(error);
-                    }
-                }
                 return this.pipeStreamOverResponse(res, stream, size);
             } else {
                 return this.render404();
@@ -621,6 +607,21 @@ export class RenderData extends AbstractRender {
         //requireCaches.add(filePath);
         const result = await import(filePath);
         return result;
+    }
+}
+
+export class RenderPage extends Streamable {
+    render(): void {
+        const { pathname: filePath, res } = this.options;
+        res.writeHeader("Content-Type", "text/html; charset=utf-8");
+
+        const stream = createReadStream(filePath);
+        const size = statSync(filePath).size;
+        return this.pipeStreamOverResponse(res, stream, size);
+    }
+
+    renderDev() {
+        console.log("RenderPage.renderDev");
     }
 }
 

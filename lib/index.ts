@@ -1,5 +1,5 @@
 import * as uws from "uWebSockets.js";
-import { AbstractRender, EventStreamHandler, RenderAPI, RenderData, RenderEvent, RenderProps, RenderServer, RenderStatic, Streamable } from "./runtime/render";
+import { AbstractRender, EventStreamHandler, RenderAPI, RenderData, RenderEvent, RenderPage, RenderProps, RenderServer, RenderStatic, Streamable } from "./runtime/render";
 import { join } from "path";
 import { createReadStream, existsSync, statSync } from 'fs';
 import ps from "./utils/pubsub";
@@ -87,13 +87,9 @@ export default function server(env = "production") {
                     app.get(pageName, (res, req) => {
                         const path = req.getUrl();
                         if (!(path.endsWith(".bundle.js") || path.endsWith(".data.js"))) {
-                            const streamable = new Streamable(getRenderProps(res, req, pageServerName));
-                            const stream = createReadStream(filePath);
-                            const size = statSync(filePath).size;
-                            return streamable.pipeStreamOverResponse(res, stream, size);
+                            return new RenderPage(getRenderProps(res, req, filePath));
                         } else {
                             return new RenderStatic(getRenderProps(res, req, pageServerName));
-
                         }
                     });
                     if (!bundleAdded) {

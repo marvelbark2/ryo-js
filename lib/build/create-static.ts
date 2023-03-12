@@ -10,34 +10,38 @@ import EntryClient, { Wrapper } from "../entry";
 
 const projectPkg = getProjectPkg()
 async function generateData(filePath: string, pageName: string, tsconfig?: string) {
-  const pkg = await projectPkg;
-  const result = await build({
-    stdin: {
-      contents: `
+  try {
+    const pkg = await projectPkg;
+    const result = await build({
+      stdin: {
+        contents: `
         import { data } from "${filePath}";
         export { data };
       `,
-      resolveDir: process.cwd(),
-    },
-    bundle: true,
-    format: "esm",
-    treeShaking: true,
-    metafile: true,
-    minify: true,
-    outfile: join(".ssr/output/server/data", `${pageName}.data.js`),
-    tsconfig: tsconfig,
-    platform: "node",
-    external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})].filter(x => !x.includes('ryo.js')),
-    ...watchOnDev
-  })
-
-  if (result.metafile) {
-    let text = await analyzeMetafile(result.metafile, {
-      verbose: true,
+        resolveDir: process.cwd(),
+      },
+      bundle: true,
+      format: "esm",
+      treeShaking: true,
+      metafile: true,
+      minify: true,
+      outfile: join(".ssr/output/server/data", `${pageName}.data.js`),
+      tsconfig: tsconfig,
+      platform: "node",
+      external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})].filter(x => !x.includes('ryo.js')),
+      ...watchOnDev
     })
-    console.log(text)
+
+    if (result.metafile) {
+      let text = await analyzeMetafile(result.metafile, {
+        verbose: true,
+      })
+      console.log(text)
+    }
+    return result;
+  } catch (error) {
+    throw new Error("Error while generating data for " + pageName + ". " + error);
   }
-  return result;
 }
 
 
@@ -101,7 +105,6 @@ export async function createStaticFile(
 
   } catch (error) {
     console.error(error);
-
+    throw error;
   }
-
 }

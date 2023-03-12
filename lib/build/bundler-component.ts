@@ -133,6 +133,7 @@ export async function generateClientBundle({
 
     } catch (e) {
         console.error({ e, filePath });
+        throw e;
     }
 }
 
