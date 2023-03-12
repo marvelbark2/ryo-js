@@ -4,3 +4,4 @@ node_modules
 /.ssr
 *.DS_Store
 .npmrc
+/dist

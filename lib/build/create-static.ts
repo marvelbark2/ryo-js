@@ -6,7 +6,7 @@ import { render } from "preact-render-to-string";
 import { createElement, h } from "preact";
 import { build, analyzeMetafile } from "esbuild";
 import { getProjectPkg, watchOnDev } from "../utils/global.js";
-import EntryClient, { Wrapper } from "../entry";
+import EntryClient from "../entry";
 
 const projectPkg = getProjectPkg()
 async function generateData(filePath: string, pageName: string, tsconfig?: string) {

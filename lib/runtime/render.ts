@@ -84,8 +84,9 @@ export abstract class AbstractRender {
     }
 
     getModuleFromPage(isDev = false) {
-        const { pathname: pageName } = this.options;
-        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${pageName}.js`);
+        const { pathname: pageName, req } = this.options;
+        const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
+        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${pageName}${xVersion ? ("@" + xVersion) : ""}.js`);
         if (isDev) {
             AbstractRender.RequireCaches.add(filePath);
         }
@@ -310,7 +311,8 @@ export class RenderAPI extends Streamable {
                 res.aborted = true;
             });
             const method = req.getMethod();
-            const api = this.getAPIMethod(pageName, method);
+            const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
+            const api = this.getAPIMethod(pageName, method, xVersion);
             if (api) {
                 const dataCall = api({
                     url: pageName,
@@ -379,7 +381,7 @@ export class RenderAPI extends Streamable {
         console.log("RenderAPI.renderDev");
     }
 
-    getAPIMethod(pageName: string, methodName: string) {
+    getAPIMethod(pageName: string, methodName: string, version: string) {
         const cacheAPIMethods = AbstractRender.CACHE_API_METHODS;
         if (this.options.isDev) {
             const api = this.getModuleFromPage(this.options.isDev);
@@ -387,7 +389,7 @@ export class RenderAPI extends Streamable {
             if (!result) return undefined;
             return result;
         } else {
-            const key = `${pageName}.${methodName}`;
+            const key = `${pageName}${version ? "@" + version : ""}.${methodName}`;
             if (cacheAPIMethods.has(key)) {
                 return cacheAPIMethods.get(key);
             } else {
@@ -524,8 +526,9 @@ export class RenderStatic extends Streamable {
     }
 }
 
+
+const cachedData = new Map<string, any>();
 export class RenderData extends AbstractRender {
-    private cachedData = new Map();
 
     async render() {
         const { res, pathname: pageName } = this.options;
@@ -552,7 +555,6 @@ export class RenderData extends AbstractRender {
 
         } else {
             //
-            const cachedData = this.cachedData;
             if (cachedData.has(pageName)) {
                 const cachedValue = cachedData.get(pageName);
                 if (!res.aborted) {
@@ -569,8 +571,6 @@ export class RenderData extends AbstractRender {
 
                 if (!res.aborted) {
                     gzip(template, function (_, result) {
-                        if (data.invalidate)
-                            cachedData.set(pageName, dataCall);
                         res.end(result);
                     });
                 }
@@ -579,7 +579,7 @@ export class RenderData extends AbstractRender {
                     const token = setInterval(async () => {
                         try {
                             const oldValue = cachedData.get(pageName)
-                            const newValue = (await data.runner(() => clearInterval(token)));
+                            const newValue = (await data.runner(() => clearInterval(token), oldValue));
                             const shouldUpdate = data.shouldUpdate;
                             if (oldValue !== newValue) {
                                 cachedData.set(pageName, newValue);

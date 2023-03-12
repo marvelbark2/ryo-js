@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.21",
+  "version": "0.0.0-meme.25",
   "description": "Fullstack framework",
   "sideEffects": false,
   "scripts": {

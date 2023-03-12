@@ -48,7 +48,7 @@ const isEndsWith = (collection: string[], name: string) => {
 
 
 const buildComponent = async (Component: any, page: string, pageName: string, outdir: string, outWSdir: string) => {
-    const keys = Object.keys(Component)
+    const keys = Object.keys(Component).map((x) => x.toLocaleLowerCase());
     if (isEndsWith([".tsx", ".jsx"], page)) {
         buildReport['/' + pageName] = keys.includes("data");
         if (keys.includes("data") && keys.includes("server")) {
@@ -62,12 +62,13 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
         console.timeEnd("🕧 Building: " + pageName);
         return await createStaticFile(Component, page, pageName, tsConfig, { outdir, bundle: true, data: keys.includes("data") });
     } else {
+        const [p] = pageName.split("@");
         if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
-            buildReport['/' + pageName] = "api";
+            buildReport['/' + p] = "api";
         } else if (isEndsWith([".ev.js", "ev.ts"], page)) {
-            buildReport['/' + pageName] = "event";
+            buildReport['/' + p] = "event";
         } else {
-            buildReport['/' + pageName] = true;
+            buildReport['/' + p] = true;
         }
         console.timeEnd("🕧 Building: " + pageName);
         return await generateServerScript({ comp: page, outdir: outWSdir, pageName });

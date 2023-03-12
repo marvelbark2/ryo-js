@@ -25,23 +25,25 @@ npm i @luncheon/esbuild-plugin-gzip babel-preset-preact -D
     * Static Component (Sync data fetching): export data method returning a value
     * Static Component (Async data fetching): export data object contains:
         - runner: Function async accepts stop method as argument (stop: called to stop caching) returns a value
-        - invalidate(Optional): Field, duration per second to cache value
+        - invalidate(Optional): Field, duration per second to cache value, it's a global value.
         - shouldUpdate(Optional): Function accepts two values (Old, new) to re-render component on runtime when data changed after the cache invalidated
-    * Server Component: export server method without returning anything
+    * Server Component (TODO): export server method without returning anything
         - Here you can use async functional Component and use nodejs api and use JSX synthax but no client side will be run (Hooks, document ... will be ignored)
+    * Parent Component: For each component type described before, you can wrap them with a component independent state, you can either add `entry.jsx` as global wrapper or you can add it to the component itself by exporting the component naming it `Parent` (Check the ex `Static async/fresh component` down below). If both used, the parent component declared in the component itself will be used. (If you're using refreshed Static async/fresh component, you should provide the id passed as parent component props in jsx/html element that will be used to revalidate the component after data updated)
 
 * Api: export function with method name, like: ``` export get() { return ... }  ```
     * JSON api: By returning js objects parsable values
     * Streamable api: By returning object:
         - stream: Created stream, like readStream
         - length: Stream length (without reading it)
+    * You can build versionable apis where you can name file like **service@1|2|...|n.(js|ts)**. Client-side, pass in http request header, a version as value for the key **X-API-VERSION**
         
 * Websockets: naming the file in src folder with ".ws.js" suffix:
     - Return object match uWebSockets.js documentation
 * Event streams: naming the file in src folder with ".ev.js" suffix:
     - Export default: object with invalidate field (ms) and runner function (Async with params route if needed)
 
-## Example: (All demos on src folder)
+## Example:
 
 ### websockets:
 ```js
@@ -67,12 +69,13 @@ export default {
 
 export function get({ url }) {
     return {
-        message: "Hello from "
+        message: "Hello from " + url
     };
 }
 
 //body: object(json input) | Buffer(buffer array input) | undefined(none)
 export function post({ body }) {
+    // do something using body
     console.log({ body });
     return {
         message: "Hello from " + (typeof body)
@@ -190,8 +193,8 @@ let count = 0;
 export const data = {
     invalidate: 1,
     shouldUpdate: (_old: CounterDataType, newValue: CounterDataType) => newValue.value > 10,
-    runner: async (stop: () => void) => {
-        if (count === 60) {
+    runner: async (stop: () => void, old?: CounterDataType) => {
+        if (old?.count === 60) {
             stop();
         }
         return {
@@ -304,23 +307,15 @@ export default {
 
 ```
 
-### 
-
-### Build & serve
-
-```bash
-npm run build && npm run start
-```
-
 ### More examples:
 https://github.com/marvelbark2/ryo-js-examples
 
-## Library Using:
+## Primary deps:
 
 - Esbuild
 - Babel
 - uwebSockets.js
 - Flamethrower
 
-## inspired:
+## Inspired by:
 - https://github.com/lydiahallie/byof-demo
