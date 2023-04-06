@@ -23,11 +23,14 @@ const args = process.argv.slice(2);
         try {
             const before = new Date().getTime();
             const buildReport = await build();
-            const data = JSON.stringify(buildReport, null, 2);
-            console.log("🕧 Building pages report");
-            const jsonReportPath = join(process.cwd(), ".ssr/build-report.json")
-            writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
-            console.log("\n✅ Build completed in " + (new Date().getTime() - before) + "ms");
+
+            if (buildReport) {
+                const data = JSON.stringify(buildReport, null, 2);
+                console.log("🕧 Building pages report");
+                const jsonReportPath = join(process.cwd(), ".ssr/build-report.json")
+                writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
+                console.log(`\n✅ Build completed in ${(new Date().getTime() - before)}ms`);
+            }
         } catch (e) {
             console.error(e);
         }

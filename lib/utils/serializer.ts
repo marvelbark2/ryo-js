@@ -24,7 +24,7 @@ class ObjectHandler {
     }
 
     each(iterator: any) {
-        for (var key in this.object) if (this.object.hasOwnProperty(key)) iterator(this.object[key]);
+        for (const key in this.object) if (this.object.hasOwnProperty(key)) iterator(this.object[key]);
     }
 
     map(iterator: any) {
@@ -32,7 +32,7 @@ class ObjectHandler {
         if (Array.isArray(obj)) return obj.map(iterator);
 
         const newObj: any = {};
-        for (var key in obj)
+        for (const key in obj)
             if (obj.hasOwnProperty(key)) newObj[key] = iterator(obj[key]);
         return newObj;
     }
@@ -56,14 +56,13 @@ const defaultSpecials: Special[] = [
             };
         },
         deserialize: function (json) {
-            var flags = "",
-                regexp;
+            let flags = "";
 
             flags += json.global ? "g" : "";
             flags += json.multiline ? "m" : "";
             flags += json.ignoreCase ? "i" : "";
 
-            regexp = new RegExp(json.source, flags);
+            const regexp = new RegExp(json.source, flags);
 
             regexp.lastIndex = json.lastIndex;
 
@@ -82,7 +81,7 @@ const defaultSpecials: Special[] = [
             };
         },
         deserialize: function (json) {
-            return new Function("return " + json.source)();
+            return new Function(`return ${json.source}`)();
         },
     },
     {
@@ -158,8 +157,8 @@ export class Deserializer {
 
 
     private handleNode(node: any): any {
-        var obj;
-        if (node && node.$class) {
+        let obj;
+        if (node?.$class) {
             const special = this.specials.byClass(node.$class);
             if (special) obj = special.deserialize(node);
         }

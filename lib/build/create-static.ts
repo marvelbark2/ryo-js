@@ -5,7 +5,7 @@ import { existsSync, writeFileSync } from "fs"
 import { render } from "preact-render-to-string";
 import { createElement, h } from "preact";
 import { build, analyzeMetafile } from "esbuild";
-import { getProjectPkg, watchOnDev } from "../utils/global.js";
+import { getProjectPkg } from "../utils/global.js";
 import EntryClient from "../entry";
 
 const projectPkg = getProjectPkg()
@@ -29,18 +29,17 @@ async function generateData(filePath: string, pageName: string, tsconfig?: strin
       tsconfig: tsconfig,
       platform: "node",
       external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})].filter(x => !x.includes('ryo.js')),
-      ...watchOnDev
     })
 
     if (result.metafile) {
-      let text = await analyzeMetafile(result.metafile, {
+      const text = await analyzeMetafile(result.metafile, {
         verbose: true,
       })
       console.log(text)
     }
     return result;
   } catch (error) {
-    throw new Error("Error while generating data for " + pageName + ". " + error);
+    throw new Error(`Error while generating data for ${pageName}. ${error}`);
   }
 }
 
@@ -78,12 +77,7 @@ export async function createStaticFile(
     const Element = h(App, { data: data ?? null }, null);
     const Parent = createElement(Wrapper, { Parent: ParentLayout, Child: Element, id: pageName }, Element);
 
-    await build({
-      bundle: true,
-      minify: true,
-      treeShaking: true,
 
-    })
     writeFileSync(
       join(outdir, options?.fileName || `${pageName}.html`),
       `<!DOCTYPE html>

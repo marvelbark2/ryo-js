@@ -11,7 +11,7 @@ npm i @luncheon/esbuild-plugin-gzip babel-preset-preact -D
 
 ## Features:
 - Routing based filesystem
-- Blazly fast (Try it by yourself :) )
+- Blazly fast (Try it by yourself)
 - Everything on src folder
 - Create apis, websockets, server files and preact components
 - SPA routing which makes the site so fast (Using Flamethrower)
@@ -37,6 +37,7 @@ npm i @luncheon/esbuild-plugin-gzip babel-preset-preact -D
         - stream: Created stream, like readStream
         - length: Stream length (without reading it)
     * You can build versionable apis where you can name file like **service@1|2|...|n.(js|ts)**. Client-side, pass in http request header, a version as value for the key **X-API-VERSION**
+    * GraphQL endpoints (Still fixing subscriptions): You can build many graphql endpoint with separated schema by naming the route with this extension .gql.(ts | js)
         
 * Websockets: naming the file in src folder with ".ws.js" suffix:
     - Return object match uWebSockets.js documentation
@@ -103,6 +104,31 @@ export function get({ url }) {
     };
 }
 ```
+
+#### GraphQL endpoint:
+
+````js
+export default {
+  schema: `
+    type Query {
+      hello: String
+    }
+    type Mutation {
+      capitalize(message: String): String
+    }
+    `,
+  resolvers: {
+    hello: () => 'Hello world!',
+    capitalize: ({ message }: { message: string }) => message.toUpperCase()
+  }
+
+  context: {
+    test: "ME"
+  }
+}
+
+````
+
 
 ### Preact components:
 #### Server components:

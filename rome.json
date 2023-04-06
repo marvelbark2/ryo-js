@@ -1,0 +1,17 @@
+{
+    "files": {
+        "ignore": ["dist/**/*"]
+    },
+    "organizeImports": {
+      "enabled": false
+    },
+    "linter": {
+      "enabled": true,
+      "rules": {
+        "recommended": true,
+        "suspicious": {
+            "noExplicitAny": "off"
+        }
+      }
+    }
+  }

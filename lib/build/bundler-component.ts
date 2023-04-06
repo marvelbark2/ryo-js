@@ -1,7 +1,7 @@
+import type { Plugin } from "esbuild"
 import { join } from "path";
 import { build, analyzeMetafile } from "esbuild";
 import compress from "@luncheon/esbuild-plugin-gzip";
-import { getProjectPkg, watchOnDev } from "../utils/global";
 
 
 const fetchParams = (pageName: string) => {
@@ -34,7 +34,7 @@ const fetchParams = (pageName: string) => {
 }
 
 const getWSDataReload = (data: any, pageName: string) => {
-    if (data && data.invalidate)
+    if (data?.invalidate)
         return `
         const ws = new WebSocket('ws://'+ window.location.host + '/${pageName}.data')
         ws.onopen = () => {
@@ -84,6 +84,44 @@ const getHydrationScript = async (filePath: string, pageName: string, data: any,
   ${fetchParams(pageName)}
 `;
 
+// function resolveUnresolvablePackages(): Plugin {
+//     const externalPackages = new Set<string>();
+
+//     return {
+//         name: 'resolve-unresolvable-packages',
+//         setup(build) {
+//             const unresolvedPackages = new Set<string>();
+
+//             // Add unresolved packages to the set
+//             build.onResolve({ filter: /.*/ }, (args) => {
+//                 const { path: unresolvedPath } = args;
+//                 unresolvedPackages.add(unresolvedPath);
+
+//                 return args;
+//             });
+
+//             // Resolve packages in the set and mark unresolvable packages as external
+//             build.onEnd(() => {
+//                 for (const unresolvedPath of unresolvedPackages) {
+//                     if (externalPackages.has(unresolvedPath)) {
+//                         continue;
+//                     }
+//                     try {
+//                         const resolvedPath = build.resolve(unresolvedPath, {
+//                             kind: "import-statement"
+//                         });
+//                         externalPackages.delete(unresolvedPath);
+//                         build.resolve({ path: unresolvedPath, pluginData: { resolvedPath } });
+//                     } catch {
+//                         externalPackages.add(unresolvedPath);
+//                         build.resolve({ path: unresolvedPath, external: true });
+//                     }
+//                 }
+//             });
+//         },
+//     };
+// }
+
 export async function generateClientBundle({
     filePath,
     tsconfig,
@@ -100,7 +138,6 @@ export async function generateClientBundle({
         jsxFactory: "h",
         jsxFragment: "Fragment",
         legalComments: "none",
-        platform: "browser",
         write: false,
     }
 }: { filePath: string; outdir?: string; pageName: string; bundleConstants?: any; data: any; parent?: any, tsconfig?: string }) {
@@ -112,27 +149,28 @@ export async function generateClientBundle({
                 contents: await getHydrationScript(filePath, pageName, data, parent),
                 resolveDir: process.cwd(),
             },
-            target: "es2020",
             format: "esm",
+            platform: 'neutral',
+            //target: ["chrome99", "firefox99", "safari15"],
+
             plugins: [compress({ gzip: true })],
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
             keepNames: /**process.env.NODE_ENV === "development" */ true,
             metafile: true,
             tsconfig,
-            ...watchOnDev,
         });
 
-        if (result.metafile) {
-            let text = await analyzeMetafile(result.metafile, {
-                verbose: true,
-            })
-            console.log(text)
-        }
+        // if (result.metafile) {
+        //     let text = await analyzeMetafile(result.metafile, {
+        //         verbose: true,
+        //     })
+        //     console.log(text)
+        // }
 
         return result;
 
     } catch (e) {
-        console.error({ e, filePath });
+        console.error({ buildCompo: e });
         throw e;
     }
 }

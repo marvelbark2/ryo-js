@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.25",
+  "version": "0.0.0-meme.26",
   "description": "Fullstack framework",
   "sideEffects": false,
   "scripts": {
@@ -15,8 +15,21 @@
   "keywords": [
     "preact",
     "framework-js",
-    "ssg",
-    "ssr"
+    "static-site-generator",
+    "rest-api",
+    "graphql",
+    "websocket",
+    "framework",
+    "react",
+    "blog",
+    "components",
+    "node",
+    "server",
+    "fullstack",
+    "browser",
+    "compiler",
+    "universal",
+    "hybrid"
   ],
   "repository": {
     "type": "git",
@@ -29,41 +42,40 @@
     "ryo": "./dist/cjs/index.js"
   },
   "peerDependencies": {
-    "@babel/core": "^7.20.2",
-    "@babel/plugin-transform-react-jsx": "^7.19.0",
-    "@babel/preset-env": "^7.20.2",
-    "@babel/register": "^7",
-    "esbuild": "^0.15.14",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.15.0"
+    "preact": "^10.13.2",
+    "react": "npm:@preact/compat",
+    "react-dom": "npm:@preact/compat"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.20.2",
+    "@babel/preset-env": "^7.21.4",
     "@chialab/esbuild-plugin-postcss": "^0.17.2",
     "@luncheon/esbuild-plugin-gzip": "^0.1.0",
     "@types/babel__register": "^7.17.0",
-    "@types/node": "^18.14.1",
-    "@types/node-fetch": "^2.6.2",
+    "@types/node": "^18.15.11",
+    "@types/node-fetch": "^2.6.3",
     "babel-preset-es2015": "^6.24.1",
     "babel-preset-preact": "^2.0.0",
-    "esbuild": "^0.17.10",
+    "esbuild": "^0.17.15",
     "postcss": "^8.4.21",
-    "tailwindcss": "^3.2.7",
-    "typescript": "^4.9.5"
+    "tailwindcss": "^3.3.1",
+    "typescript": "^5.0.3"
   },
   "dependencies": {
-    "@babel/core": "^7.21.0",
+    "@babel/core": "^7.21.4",
     "@babel/plugin-transform-react-jsx": "^7.21.0",
-    "@babel/preset-env": "^7.20.2",
+    "@babel/preset-env": "^7.21.4",
     "@babel/register": "^7",
     "flamethrower-router": "^0.0.0-meme.12",
+    "graphql": "16.6.0",
+    "graphql-ws": "5.12.1",
+    "is-native-module": "1.1.3",
     "module-from-string": "^3.3.0",
-    "node-fetch": "2.6.7",
+    "node-fetch": "^2.6.7",
     "postcss-cli": "^10.1.0",
-    "preact": "^10.13.0",
-    "preact-render-to-string": "^5.2.6",
-    "react": "npm:@preact/compat",
-    "react-dom": "npm:@preact/compat",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.19.0"
+    "preact-render-to-string": "6.0.2",
+    "preact-server-renderer": "0.3.1",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.20.0",
+    "winston": "3.8.2"
   },
   "files": [
     "dist/cjs"

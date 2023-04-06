@@ -1,17 +1,17 @@
 import type uws from 'uWebSockets.js';
 
 import { join } from 'path';
-import { createElement } from 'preact';
-import { render as preactRender } from "preact-render-to-string";
-import { PassThrough, Readable } from 'stream';
-import { createReadStream, statSync } from 'fs';
+import { Fragment, createElement } from 'preact';
+import render from 'preact-render-to-string';
+import { Readable, Stream } from 'stream';
+import { createReadStream, existsSync, statSync } from 'fs';
 import { gzip } from 'zlib';
 
 import { generateClientBundle } from './transpilor';
 import { Serializer } from '../utils/serializer';
 import ps from "../utils/pubsub";
-
-
+import logger from '../utils/logger';
+import EntryClient from '../entry';
 
 /** TODOS:
  * Render Errors: Class handling errors contains methods to handle errors (render404 ...), Logging errors, and sending errors to the client
@@ -25,6 +25,7 @@ export interface RenderProps {
     pathname: string;
     isDev: boolean;
     buildReport: any
+    render?: boolean
 }
 
 interface RenderErrorProps extends RenderProps {
@@ -48,6 +49,7 @@ export abstract class AbstractRender {
         }
          */
 
+        if (this.options.render === false) return;
         this.render();
     }
 
@@ -86,7 +88,7 @@ export abstract class AbstractRender {
     getModuleFromPage(isDev = false) {
         const { pathname: pageName, req } = this.options;
         const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
-        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${pageName}${xVersion ? ("@" + xVersion) : ""}.js`);
+        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${pageName}${xVersion ? (`@${xVersion}`) : ""}.js`);
         if (isDev) {
             AbstractRender.RequireCaches.add(filePath);
         }
@@ -96,7 +98,13 @@ export abstract class AbstractRender {
     render404() {
         const { res, pathname } = this.options;
         res.writeStatus("404 Not Found");
-        res.end("404 Not Found - page: " + pathname);
+        res.end(`404 Not Found - page: ${pathname}`);
+    }
+
+    renderError({ error }: { error: number }) {
+        const { res, pathname } = this.options;
+        res.writeStatus(`${error} Error`);
+        res.end(`${error} Error - page: ${pathname}`);
     }
 }
 
@@ -112,8 +120,8 @@ export class Streamable extends AbstractRender {
     /* Either onAborted or simply finished request */
     onAbortedOrFinishedResponse(res: uws.HttpResponse, readStream: Readable) {
 
-        if (res.id == -1) {
-            console.log("ERROR! onAbortedOrFinishedResponse called twice for the same res!");
+        if (res.id === -1) {
+            logger.log('error', "onAbortedOrFinishedResponse called twice for the same res!")
         } else {
             readStream.destroy();
         }
@@ -131,10 +139,10 @@ export class Streamable extends AbstractRender {
             const ab = this.toArrayBuffer(chunk);
 
             /* Store where we are, globally, in our response */
-            let lastOffset = res.getWriteOffset();
+            const lastOffset = res.getWriteOffset();
 
             /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
-            let [ok, done] = res.tryEnd(ab, totalSize);
+            const [ok, done] = res.tryEnd(ab, totalSize);
 
             /* Did we successfully send last chunk? */
             if (done) {
@@ -152,7 +160,7 @@ export class Streamable extends AbstractRender {
                     /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
 
                     /* On failure the timeout will start */
-                    let [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
+                    const [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
                     if (done) {
                         this.onAbortedOrFinishedResponse(res, readStream);
                     } else if (ok) {
@@ -171,7 +179,7 @@ export class Streamable extends AbstractRender {
         }).on('error', (e) => {
             /* Todo: handle errors of the stream, probably good to simply close the response */
             this.render404();
-            console.log("Error reading file, ", e);
+            logger.error(`Error reading file, ${e}`);
         });
 
         /* If you plan to asyncronously respond later on, you MUST listen to onAborted BEFORE returning */
@@ -180,35 +188,80 @@ export class Streamable extends AbstractRender {
         });
     }
 }
-
 export class RenderServer extends AbstractRender {
+
     async render() {
-        const { res, pathname: path } = this.options;
+        const { res, pathname: path, req } = this.options;
         res.onAborted(() => {
             res.aborted = true;
         });
 
         const pwd = AbstractRender.PWD;
         try {
-            const componentPath = join(pwd, ".ssr", "output", "server", "pages", path + ".js");
+            const componentPath = join(pwd, ".ssr", "output", "server", "pages", `${path}.js`);
             const splittedPath = path.split("/");
             splittedPath.pop();
-            const pageDirName = join(pwd, "src", splittedPath.join("/"));
-            console.log("🚀 ~ file: index.ts ~ line 519 ~ renderServer ~ pageDirName", pageDirName)
-            const component = require(componentPath).default;
+            const component = require(componentPath);
 
-            const defaultComponent = component.default.constructor.name === 'AsyncFunction' ? await component.default() : component.default();
-            const Element = createElement(() => defaultComponent, null);
+            const isAsync = component.constructor.name === "AsyncFunction";
+
+            const dataFn = component.server({ req });
+
+            const Wrapper = existsSync(join(process.cwd(), "entry.jsx")) ? require(join(process.cwd(), "entry.jsx")).default : EntryClient;
+            const ParentLayout = component.Parent || Wrapper;
+
+            const Parent = createElement(ParentLayout, { Child: null, id: path }, null);
+
+            const serverData = dataFn ? ((typeof dataFn.then === "function") ? await dataFn : dataFn) : ({
+
+            });
+
+
+            if (serverData.status) {
+                console.log(serverData.status)
+                res.writeStatus(serverData.status.toString());
+            } else {
+                res.writeStatus("200 OK");
+            }
+
             res.writeHeader("Content-Type", "text/html");
-            const html = preactRender(Element);
 
-            const clientBundle = await generateClientBundle({ filePath: componentPath, data: null });
+            if (serverData.headers) {
+                for (const key in serverData.headers) {
+                    if (!["Content-Type"].includes(key))
+                        res.writeHeader(key, serverData.headers[key]);
+                }
+            }
 
-            const finalHtml = html.replace("</body>", `<script>${clientBundle}</script></body>`);
+            const html = render(Parent, null);
+
+            const head = render(serverData.head || Fragment, null);
+
+            const clientBundle = await generateClientBundle({ filePath: componentPath, data: serverData.body, id: path, suspend: isAsync });
+
+            const finalHtml = `
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    ${head}
+                </head>
+                <body>
+                    <div id="root">${html}</div>
+                    <script>
+                        window.__PRELOADED_STATE__ = ${JSON.stringify({})};
+                        ${clientBundle ? clientBundle.outputFiles?.[0].text : ""}
+                    </script>
+                </body>
+            </html>
+            `
             return res.end(finalHtml);
         } catch (e) {
             console.error(e);
-            return this.render404();
+            return this.renderError({
+                error: 500
+            });
         }
     }
 
@@ -257,7 +310,7 @@ export class RenderEvent extends AbstractRender {
         });
         const getEvent = this.getModuleFromPage(isDev);
         const event = getEvent.default;
-        let payload = {
+        const payload = {
             url: req.getUrl(),
             params: undefined
         }
@@ -291,7 +344,7 @@ export class RenderEvent extends AbstractRender {
             )
 
         } else {
-            console.log("No event found");
+            logger.error("No event found");
             return this.render404();
         }
     }
@@ -329,6 +382,7 @@ export class RenderAPI extends Streamable {
                         }
                     },
                     params: () => {
+                        // TODO: add support for query params
                         const params = pageName.includes(":") ? this.getParams() : undefined;
                         return params ? Object.fromEntries(params) : undefined
                     },
@@ -359,26 +413,37 @@ export class RenderAPI extends Streamable {
                 if (data.stream) {
                     if (!data.length) {
 
-                        console.log("Error reading stream");
-                        return new RenderError({ ...this.options, error: 500, isDev: this.options.isDev });
+                        logger.error("Error reading stream");
+                        return this.renderError({
+                            error: 500
+                        })
                     }
+                    const stream: Stream = data.stream;
+                    stream.on("error", (e) => {
+                        logger.error(e);
+                        return this.renderError({
+                            error: 500
+                        })
+                    });
                     this.pipeStreamOverResponse(res, data.stream, data.length);
                 } else {
                     res.writeHeader("Content-Type", "application/json");
                     return res.end(JSON.stringify(data));
                 }
             } else {
-                return this.render404()
+                return this.renderError({
+                    error: 405,
+                })
             }
 
         } catch (e) {
-            console.error(e);
+            logger.error(e);
             return this.render404()
         }
     }
 
     renderDev() {
-        console.log("RenderAPI.renderDev");
+        logger.debug("RenderAPI.renderDev");
     }
 
     getAPIMethod(pageName: string, methodName: string, version: string) {
@@ -389,7 +454,7 @@ export class RenderAPI extends Streamable {
             if (!result) return undefined;
             return result;
         } else {
-            const key = `${pageName}${version ? "@" + version : ""}.${methodName}`;
+            const key = `${pageName}${version ? `@${version}` : ""}.${methodName}`;
             if (cacheAPIMethods.has(key)) {
                 return cacheAPIMethods.get(key);
             } else {
@@ -407,7 +472,197 @@ export class RenderAPI extends Streamable {
         let bytes = 0;
         /* Register data cb */
         res.onData((ab, isLast) => {
-            let chunk = Buffer.from(ab);
+            const chunk = Buffer.from(ab);
+            bytes += chunk.length;
+
+            if (isLast) {
+                if (bytes === 0) {
+                    cb(undefined);
+                    return;
+                }
+                let json;
+                if (buffer) {
+                    try {
+                        json = JSON.parse(Buffer.concat([buffer, chunk]) as any);
+                    } catch (e) {
+                        /* res.close calls onAborted */
+                        cb(Buffer.concat([buffer, chunk]))
+                        return;
+                    }
+                    cb(json);
+                } else {
+                    try {
+                        json = JSON.parse(chunk as any);
+                    } catch (e) {
+                        /* res.close calls onAborted */
+                        cb(chunk)
+                        return;
+                    }
+                    cb(json);
+                }
+            } else {
+                if (buffer) {
+                    buffer = Buffer.concat([buffer, chunk]);
+                } else {
+                    buffer = Buffer.concat([chunk]);
+                }
+            }
+        });
+
+    }
+}
+
+export class RenderGraphQL extends Streamable {
+    async render() {
+        const { res, req } = this.options;
+        try {
+            const method = req.getMethod().toLowerCase();
+            if (method === "post") {
+                const gqlModule = this.getModuleFromPage(this.options.isDev);
+
+                if (!gqlModule) {
+                    return this.renderError({
+                        error: 404
+                    })
+                }
+                res.onAborted(() => {
+                    res.aborted = true;
+                });
+                const data = await new Promise((resolve, reject) => {
+                    this.readJson(res, (obj: Buffer | string) => {
+                        resolve(obj);
+                    }, () => {
+                        /* Request was prematurely aborted or invalid or missing, stop reading */
+                        reject('Invalid JSON or no data at all!');
+                    })
+                }) as any
+
+                const gqlObject = gqlModule.default ? gqlModule.default : gqlModule;
+
+                if (!gqlObject.schema) {
+                    return this.renderError({
+                        error: 500
+                    })
+                }
+
+                try {
+                    const { graphql, buildSchema } = await import("graphql");
+                    const result = await graphql({
+                        schema: buildSchema(gqlObject.schema),
+                        source: data.query,
+                        variableValues: data?.variables,
+                        rootValue: gqlObject?.resolvers,
+                        contextValue: gqlObject?.context,
+                        operationName: data?.operationName
+                    })
+                    res.writeHeader("Content-Type", "application/json");
+
+                    return res.end(JSON.stringify(result));
+                } catch (e) {
+                    logger.error(e);
+
+                    res.writeStatus("500")
+                    res.writeHeader("Content-Type", "application/json");
+
+                    return res.end(JSON.stringify(e));
+                }
+            } else {
+                if (this.options.isDev) {
+                    const thisPage = req.getUrl()
+
+                    const html = `
+                    <!DOCTYPE html>
+                    <html>
+                    
+                    <head>
+                      <meta charset=utf-8/>
+                      <meta name="viewport" content="user-scalable=no, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, minimal-ui">
+                      <title>GraphQL Playground</title>
+                      <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/graphql-playground-react/build/static/css/index.css" />
+                      <link rel="shortcut icon" href="//cdn.jsdelivr.net/npm/graphql-playground-react/build/favicon.png" />
+                      <script src="//cdn.jsdelivr.net/npm/graphql-playground-react/build/static/js/middleware.js"></script>
+                    </head>
+                    
+                    <body>
+                      <div id="root">
+                        <style>
+                          body {
+                            background-color: rgb(23, 42, 58);
+                            font-family: Open Sans, sans-serif;
+                            height: 90vh;
+                          }
+                    
+                          #root {
+                            height: 100%;
+                            width: 100%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                          }
+                    
+                          .loading {
+                            font-size: 32px;
+                            font-weight: 200;
+                            color: rgba(255, 255, 255, .6);
+                            margin-left: 20px;
+                          }
+                    
+                          img {
+                            width: 78px;
+                            height: 78px;
+                          }
+                    
+                          .title {
+                            font-weight: 400;
+                          }
+                        </style>
+                        <img src='//cdn.jsdelivr.net/npm/graphql-playground-react/build/logo.png' alt=''>
+                        <div class="loading"> Loading
+                          <span class="title">GraphQL Playground</span>
+                        </div>
+                      </div>
+                      <script>window.addEventListener('load', function (event) {
+                          GraphQLPlayground.init(document.getElementById('root'), {
+                            endpoint: window.location.origin + '${thisPage}',
+                          })
+                        })
+                     </script>
+                    </body>
+                    
+                    </html>
+                    `
+                    res.writeHeader("Content-Type", "text/html");
+                    return res.end(html.replace(/\n|\t/g, ' '));
+                } else {
+                    return this.renderError({
+                        error: 405,
+                    })
+                }
+
+            }
+
+        } catch (e) {
+            logger.error(e);
+            return this.render404()
+        }
+    }
+
+
+    executeSubscriptions() {
+        const gqlModule = this.getModuleFromPage(this.options.isDev);
+
+        if (gqlModule) {
+            const gqlObject = gqlModule.default ? gqlModule.default : gqlModule;
+            return gqlObject;
+        }
+    }
+
+    readJson(res: uws.HttpResponse, cb: any, err: any) {
+        let buffer: Buffer | null = null;
+        let bytes = 0;
+        /* Register data cb */
+        res.onData((ab, isLast) => {
+            const chunk = Buffer.from(ab);
             bytes += chunk.length;
 
             if (isLast) {
@@ -449,11 +704,11 @@ export class RenderAPI extends Streamable {
 
 export class renderDefault extends AbstractRender {
     render() {
-        console.log("RenderAPI.render");
+        logger.debug("RenderAPI.render");
     }
 
     renderDev() {
-        console.log("RenderAPI.renderDev");
+        logger.debug("RenderAPI.renderDev");
     }
 }
 export class RenderStatic extends Streamable {
@@ -583,12 +838,12 @@ export class RenderData extends AbstractRender {
                             const shouldUpdate = data.shouldUpdate;
                             if (oldValue !== newValue) {
                                 cachedData.set(pageName, newValue);
-                                if (shouldUpdate && shouldUpdate(oldValue, newValue)) {
+                                if (shouldUpdate?.(oldValue, newValue)) {
                                     ps.publish(`fetch-${pageName}`, newValue);
                                 }
                             }
                         } catch (e) {
-                            console.error(e);
+                            logger.error(e);
                             clearInterval(token);
                         }
                     }, data.invalidate * 1000);
@@ -617,21 +872,21 @@ export class RenderPage extends Streamable {
 
         const stream = createReadStream(filePath);
         const size = statSync(filePath).size;
-        return this.pipeStreamOverResponse(res, stream, size);
+        this.pipeStreamOverResponse(res, stream, size);
     }
 
     renderDev() {
-        console.log("RenderPage.renderDev");
+        logger.debug("RenderPage.renderDev");
     }
 }
 
 export class RenderError {
     constructor(private readonly options: RenderErrorProps) { }
     render() {
-        console.log("RenderStatic.render");
+        logger.debug("RenderStatic.render");
     }
 
     renderDev() {
-        console.log("RenderStatic.renderDev");
+        logger.debug("RenderStatic.renderDev");
     }
 }

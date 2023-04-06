@@ -1,7 +1,6 @@
 import { join } from "path";
 import { build } from "esbuild";
-import { existsSync } from "fs";
-import { watchOnDev, getProjectPkg } from "../utils/global";
+import { getProjectPkg } from "../utils/global";
 
 
 export async function generateServerScript({
@@ -30,12 +29,11 @@ export async function generateServerScript({
         tsconfig: tsConfig,
         allowOverwrite: true,
         external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {})],
-        ...watchOnDev,
     }).then((result) => {
         if (result.errors.length > 0) {
             console.error(result.errors)
         } else {
-            console.log("✅ Generated server script for " + pageName);
+            console.log(`✅ Generated server script for ${pageName}`);
         }
     }).catch(console.error)
 }

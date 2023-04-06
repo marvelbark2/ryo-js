@@ -1,5 +1,3 @@
 declare module "RyoConfig" {
-    export interface Config {
-
-    }
+    export type Config = {}
 }

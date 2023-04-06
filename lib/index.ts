@@ -1,7 +1,7 @@
 import * as uws from "uWebSockets.js";
-import { AbstractRender, EventStreamHandler, RenderAPI, RenderData, RenderEvent, RenderPage, RenderProps, RenderServer, RenderStatic, Streamable } from "./runtime/render";
+import { AbstractRender, EventStreamHandler, RenderAPI, RenderData, RenderEvent, RenderGraphQL, RenderPage, RenderProps, RenderServer, RenderStatic } from "./runtime/render";
 import { join } from "path";
-import { createReadStream, existsSync, statSync } from 'fs';
+import { existsSync } from 'fs';
 import ps from "./utils/pubsub";
 
 import babelRegister from "@babel/register";
@@ -11,6 +11,10 @@ import "./polyfills/index";
 
 import { getPages } from "./utils/page";
 import { Serializer } from "./utils/serializer";
+import logger from "./utils/logger";
+
+import { buildSchema, parse as gqlParser, subscribe } from "graphql";
+
 
 
 let uwsToken: uws.us_listen_socket | null;
@@ -64,10 +68,61 @@ export default function server(env = "production") {
             const isServer = buildReport[pageServerName] === 'server';
             const isApi = buildReport[pageServerName] === 'api';
             const isEvent = buildReport[pageServerName] === 'event';
+            const isCron = buildReport[pageServerName] === 'cron';
+            const isQGL = buildReport[pageServerName] === 'graphql';
 
             isStatic.set(pageServerName, isPage);
 
-            const pageRouters = new Set([page, (page + "/").replace("//", "/")]);
+            if (isQGL) {
+                const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${page}.js`);
+                const gqlModule = require(filePath);
+
+                if (gqlModule) {
+                    const gqlObject = gqlModule.default ? gqlModule.default : gqlModule;
+                    if (gqlObject) {
+                        app.ws(page, {
+                            compression: uws.SHARED_COMPRESSOR,
+                            maxPayloadLength: 16 * 1024 * 1024,
+                            idleTimeout: 16,
+
+                            message: async (ws, message, isBinary) => {
+                                const data = Buffer.from(message).toString();
+                                const parsed = JSON.parse(data);
+
+                                if (parsed.type === "connection_init") {
+                                    // Handle connection initiation
+                                    ws.send(JSON.stringify({ type: "connection_ack" }));
+
+                                } else if (parsed.type === "start") {
+                                    // Handle GraphQL subscription start
+                                    const { query, variables, operationName } = parsed.payload;
+                                    const resultIterator: any = await subscribe({
+                                        schema: buildSchema(gqlObject.schema),
+                                        document: gqlParser(query),
+                                        contextValue: gqlObject.context,
+                                        variableValues: variables,
+                                        operationName,
+                                        rootValue: gqlObject.resolvers,
+                                    });
+
+                                    for await (const result of resultIterator) {
+                                        ws.send(
+                                            JSON.stringify({
+                                                type: "data",
+                                                id: parsed.id,
+                                                payload: result,
+                                            })
+                                        );
+                                    }
+
+                                }
+                            }
+                        })
+                    }
+                }
+            }
+
+            const pageRouters = new Set([page, (`${page}/`).replace("//", "/")]);
             let bundleAdded = false;
             pageRouters.forEach((pageName) => {
                 if (isServer) {
@@ -78,8 +133,16 @@ export default function server(env = "production") {
                     app.get(pageName, (res, req) => {
                         return new RenderEvent(getRenderProps(res, req, pageServerName))
                     })
-                } else if (isApi || !isPage) {
+                } else if (isCron) {
+                    app.get(pageName, (res, req) => {
+                        return new RenderEvent(getRenderProps(res, req, pageServerName))
+                    })
+                } else if (isQGL) {
+                    app.any(pageName, (res, req) => {
+                        return new RenderGraphQL(getRenderProps(res, req, pageServerName))
+                    });
 
+                } else if (isApi || !isPage) {
                     app.any(pageName, (res, req) => {
                         return new RenderAPI(getRenderProps(res, req, pageServerName));
                     })
@@ -145,11 +208,9 @@ export default function server(env = "production") {
                         close: object.close
                     });
                 } else {
-                    throw new Error(`File: ${pageName} | ` + "You need to export a default object with open, message, drain, and close methods");
+                    throw new Error(`File: ${pageName} | You need to export a default object with open, message, drain, and close methods`);
                 }
             })
-        } else {
-            console.log("No ws endpoints found");
         }
 
     }
@@ -157,41 +218,42 @@ export default function server(env = "production") {
     loadWSEndpoints();
 
     const subscriptions = new Map();
-    Object.entries(buildReport).forEach(([page, hasData]) => {
-        if (hasData || page.includes("/:")) {
-            app.ws(`${page}.data`, {
-                compression: uws.SHARED_COMPRESSOR,
-                maxPayloadLength: 16 * 1024 * 1024,
-                idleTimeout: 16,
-                open: (ws: uws.WebSocket) => {
-                    if (hasData) {
-                        const unsub = ps.subscribe((msg, data) => {
-                            if (msg === `fetch-${page}` && data) {
-                                const serialize = new Serializer(data);
-                                ws.send(JSON.stringify({ type: "change", payload: serialize.toJSON() }));
+    Object.entries(buildReport)
+        .forEach(([page, hasData]) => {
+            if (hasData || page.includes("/:")) {
+                app.ws(`${page}.data`, {
+                    compression: uws.SHARED_COMPRESSOR,
+                    maxPayloadLength: 16 * 1024 * 1024,
+                    idleTimeout: 16,
+                    open: (ws: uws.WebSocket) => {
+                        if (hasData) {
+                            const unsub = ps.subscribe((msg, data) => {
+                                if (msg === `fetch-${page}` && data) {
+                                    const serialize = new Serializer(data);
+                                    ws.send(JSON.stringify({ type: "change", payload: serialize.toJSON() }));
+                                }
+                            })
+
+                            subscriptions.set(page, unsub);
+                        }
+
+                        if (page.includes("/:")) {
+                            const params = page.split("/:")[1];
+                            ws.send(JSON.stringify({ type: "script", payload: params }));
+                        }
+                    },
+
+                    close: (ws, code, message) => {
+                        if (hasData && subscriptions.has(page)) {
+                            const fn = subscriptions.get(page);
+                            if (typeof fn === "function") {
+                                fn();
                             }
-                        })
-
-                        subscriptions.set(page, unsub);
-                    }
-
-                    if (page.includes("/:")) {
-                        const params = page.split("/:")[1];
-                        ws.send(JSON.stringify({ type: "script", payload: params }));
-                    }
-                },
-
-                close: (ws, code, message) => {
-                    if (hasData && subscriptions.has(page)) {
-                        const fn = subscriptions.get(page);
-                        if (typeof fn === "function") {
-                            fn();
                         }
                     }
-                }
-            })
-        }
-    })
+                })
+            }
+        })
 
 
     if (process.env.NODE_ENV === "development" || env === "dev") {
@@ -214,19 +276,21 @@ export default function server(env = "production") {
         })
     }
 
+
+
     app.listen(3000, (token) => {
         if (token) {
             uwsToken = token;
-            console.log("Listening to port 3000");
+            logger.info("Listening to port 3000");
         } else {
-            console.log("Failed to listen to port 3000");
+            logger.error("Failed to listen to port 3000");
         }
     });
 
 
     return () => {
         if (uwsToken) {
-            console.log('Shutting down now');
+            logger.debug('Shutting down now');
             uws.us_listen_socket_close(uwsToken);
             AbstractRender.ClearCache()
             uwsToken = null;

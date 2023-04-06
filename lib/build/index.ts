@@ -1,6 +1,3 @@
-
-
-//import { createStaticFile } from './create-static'
 import register from "@babel/register";
 
 const reg = () => register({
@@ -13,7 +10,7 @@ import { h, Fragment } from "preact";
 Object.defineProperty(global, 'h', h);
 Object.defineProperty(global, 'Fragment', Fragment);
 
-import { rmSync, existsSync, readFileSync, createReadStream, createWriteStream, mkdirSync } from "fs";
+import { rmSync, existsSync, createReadStream, createWriteStream, mkdirSync } from "fs";
 import { join } from "path";
 
 
@@ -27,6 +24,8 @@ import { generateSSRPages } from "./create-ssr";
 import { buildSync } from "esbuild";
 import { importFromStringSync } from "module-from-string";
 import { getProjectPkg } from "../utils/global";
+import RouteValidator from "./validators/RouteValidator";
+import logger from "../utils/logger";
 
 const buildReport: any = {};
 
@@ -50,27 +49,27 @@ const isEndsWith = (collection: string[], name: string) => {
 const buildComponent = async (Component: any, page: string, pageName: string, outdir: string, outWSdir: string) => {
     const keys = Object.keys(Component).map((x) => x.toLocaleLowerCase());
     if (isEndsWith([".tsx", ".jsx"], page)) {
-        buildReport['/' + pageName] = keys.includes("data");
+        buildReport[`/${pageName}`] = keys.includes("data");
         if (keys.includes("data") && keys.includes("server")) {
             throw new Error(`Page ${pageName} has both data and server. This is not supported.`);
         }
         if (keys.includes("server")) {
-            buildReport['/' + pageName] = "server";
-            console.timeEnd("🕧 Building: " + pageName);
+            buildReport[`/${pageName}`] = "server";
+            console.timeEnd(`🕧 Building: ${pageName}`);
             return await generateSSRPages({ outdir: outWSdir, pageName, path: page, tsConfig });
         }
-        console.timeEnd("🕧 Building: " + pageName);
+        console.timeEnd(`🕧 Building: ${pageName}`);
         return await createStaticFile(Component, page, pageName, tsConfig, { outdir, bundle: true, data: keys.includes("data") });
     } else {
         const [p] = pageName.split("@");
         if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
-            buildReport['/' + p] = "api";
+            buildReport[`/${p}`] = "api";
         } else if (isEndsWith([".ev.js", "ev.ts"], page)) {
-            buildReport['/' + p] = "event";
-        } else {
-            buildReport['/' + p] = true;
+            buildReport[`/${p}`] = "event";
+        } else if (isEndsWith([".gql.ts", ".gql.ts"], page)) {
+            buildReport[`/${p}`] = "graphql";
         }
-        console.timeEnd("🕧 Building: " + pageName);
+        console.timeEnd(`🕧 Building: ${pageName}`);
         return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
     }
 }
@@ -93,17 +92,31 @@ async function buildClient() {
         const outWSdir = join(ssrdir, "output/server");
         reg();
 
-        const allBuilds = pages
-            .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx"], page))
-            .map(async (page: string) => {
+        const modulePages = pages
+            .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx"], page));
+
+
+        const routeValidator = new RouteValidator({
+            routes: modulePages
+        })
+
+
+        if (routeValidator.isValide()) {
+
+            const getServerTsStatus = (pageName: string) => {
+                if (pageName.endsWith(".gql")) return "graphql";
+                else if (pageName.endsWith(".ev")) return "event";
+                else return "api";
+            }
+            const allBuilds = modulePages.map(async (page: string) => {
                 if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx"], page)) {
                     throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
                 }
                 const pageName = getPageName(page);
-                console.time("🕧 Building: " + pageName);
+                console.time(`🕧 Building: ${pageName}`);
                 if (page.endsWith(".ts")) {
-                    buildReport['/' + pageName] = true;
-                    console.timeEnd("🕧 Building: " + pageName);
+                    buildReport[`/${pageName}`] = getServerTsStatus(pageName);
+                    console.timeEnd(`🕧 Building: ${pageName}`);
                     return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
                 } else if (page.endsWith(".tsx")) {
                     const result = buildSync({
@@ -131,9 +144,19 @@ async function buildClient() {
                 }
             });
 
-        await Promise.all(allBuilds);
+            await Promise.all(allBuilds);
 
-        generateFrameworkJSBundle();
+            generateFrameworkJSBundle();
+
+            copyPublicFiles();
+
+            return buildReport;
+
+        } else {
+            routeValidator.printTrace();
+        }
+
+
 
     } catch (error) {
         console.error({ e: error });
@@ -158,10 +181,8 @@ function copyPublicFiles() {
 
 export default async function build() {
     try {
-        await buildClient();
-        copyPublicFiles();
-        return buildReport;
+        return await buildClient();
     } catch (e) {
-        console.error(e);
+        logger.error(e);
     }
 }
