@@ -108,6 +108,7 @@ export function get({ url }) {
 #### GraphQL endpoint:
 
 ````js
+// path: ttql.gql.ts
 export default {
   schema: `
     type Query {
@@ -128,7 +129,7 @@ export default {
 }
 
 ````
-
+use NODE_ENV=development to access graphql playground in GET request as example: /ttql.gql
 
 ### Preact components:
 #### Server components:

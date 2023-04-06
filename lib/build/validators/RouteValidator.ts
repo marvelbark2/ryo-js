@@ -21,7 +21,7 @@ export default class RouteValidator {
     private routes: RouteNode[] = []
     constructor(private opts: RouteValidatorConstructor) {
         this.convertToTree()
-        console.log(JSON.stringify(this.routes[0]))
+        //console.log(JSON.stringify(this.routes[0]))
     }
 
     convertToTree() {
