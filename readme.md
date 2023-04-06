@@ -6,7 +6,6 @@ Small js fullstack framework blazly fast
 
 ```sh
 npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
-npm i @luncheon/esbuild-plugin-gzip babel-preset-preact -D
 ```
 
 ## Features:
