@@ -13,7 +13,7 @@ npm i @luncheon/esbuild-plugin-gzip babel-preset-preact -D
 - Routing based filesystem
 - Blazly fast (Try it by yourself)
 - Everything on src folder
-- Create apis, websockets, server files and preact components
+- Create apis, websockets, graphQL, server files and preact components
 - SPA routing which makes the site so fast (Using Flamethrower)
 - Typescript (No types generated at least for now) supported without configuration needed (Example: https://github.com/marvelbark2/ryo-js-examples/blob/main/ryo-api/src/me.ts)
 
@@ -344,5 +344,7 @@ https://github.com/marvelbark2/ryo-js-examples
 - uwebSockets.js
 - Flamethrower
 
-## Inspired by:
+## Thanks to:
 - https://github.com/lydiahallie/byof-demo
+
+Fill free to add PRs or issues
