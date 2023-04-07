@@ -509,6 +509,8 @@ export class RenderAPI extends Streamable {
             }
         });
 
+        res.onAborted(err);
+
     }
 }
 
