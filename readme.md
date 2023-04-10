@@ -150,41 +150,30 @@ use NODE_ENV=development to access graphql playground in GET request as example:
 ### Preact components:
 #### Server components:
 
-At least for now, ** You can't import other components ** 
+At least for now:
+** You can't use hooks ** 
 ```js
 //Path: src/server.jsx
 
-import { PrismaClient } from "@prisma/client";
-
-export function server() {
-
+export function server({ req }) {
+    return {
+        status: 201,
+        headers: {
+            "X-TEST": "YES",
+        },
+        body: {
+            "From": "SERVER",
+        }
+    }
 }
 
-const prisma = new PrismaClient();
-
-const Btn = ({ text }) => {
+export default function index({ data }) {
     return (
-        <button onClick={() => {
-            console.log('clicked')
-        }}>{text}</button>
-    )
-}
-export default async function SSRPage() {
-    const data = await prisma.event.findMany();
-    console.log(data.length)
-    return (
-
         <div>
-            <ul>
-                {data.map((ev) => (
-                    <li key={ev.id}>
-                        <Btn text={ev.name} />
-                    </li>
-                ))}
-            </ul>
+            <h1>Server Side Rendering</h1>
 
+            <p>From: {data.From}</p>
         </div>
-
     )
 }
 ```
