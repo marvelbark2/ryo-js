@@ -46,15 +46,15 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
 
 
 ## Progress Status:
-- Preact Components
+- [ ] Preact Components
   - [X] Async static component
   - [X] Sync static component
   - [X] Server Component
   - [ ] Server Component with hooks
-- Api
+- [X] Api
   - [X] JSON api
   - [X] Readable stream api
-- GraphQL
+- [ ] GraphQL
   - [X] Query
   - [X] Mutation
   - [ ]  Subscription
@@ -135,10 +135,9 @@ export default {
     }
     `,
   resolvers: {
-    hello: () => 'Hello world!',
+    hello: (_: unknown, ctx: { test: string }) => `${ctx.test}: hello world`,
     capitalize: ({ message }: { message: string }) => message.toUpperCase()
-  }
-
+  },
   context: {
     test: "ME"
   }
