@@ -52,136 +52,150 @@ export default function server(env = "production") {
     }
 
 
-    Object.keys(buildReport)
+    const x = Object.keys(buildReport)
         .sort((a, b) => {
             if (a === "/index") return -1;
             if (b === "/index") return 1;
             if (a.includes("/:") && !b.includes("/:")) return 1;
             if (!a.includes("/:") && b.includes("/:")) return -1;
-            return 0;
-        })
-        .forEach((pageServerName) => {
-            const filePath = join(pwd, ".ssr", "output", "static", `${pageServerName}.html`)
-            const page = pageServerName.replace("/index", "/");
+            return a.split("/").length - b.split("/").length;
+        });
 
-            const isPage = existsSync(filePath);
-            const isServer = buildReport[pageServerName] === 'server';
-            const isApi = buildReport[pageServerName] === 'api';
-            const isEvent = buildReport[pageServerName] === 'event';
-            const isCron = buildReport[pageServerName] === 'cron';
-            const isQGL = buildReport[pageServerName] === 'graphql';
 
-            isStatic.set(pageServerName, isPage);
 
-            if (isQGL) {
-                const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${page}.js`);
-                const gqlModule = require(filePath);
+    const changePageToRoute = (page: string) => {
+        const route = page.replace("/index", "")
+        return route.length > 1 ? route : "/";
+    }
 
-                if (gqlModule) {
-                    const gqlObject = gqlModule.default ? gqlModule.default : gqlModule;
-                    if (gqlObject) {
-                        app.ws(page, {
-                            compression: uws.SHARED_COMPRESSOR,
-                            maxPayloadLength: 16 * 1024 * 1024,
-                            idleTimeout: 16,
+    x.forEach((pageServerName) => {
+        const filePath = join(pwd, ".ssr", "output", "static", `${pageServerName}.html`)
+        const page = pageServerName.replace("/index", "/");
 
-                            message: async (ws, message, isBinary) => {
-                                const data = Buffer.from(message).toString();
-                                const parsed = JSON.parse(data);
+        const isPage = existsSync(filePath);
+        const isServer = buildReport[pageServerName] === 'server';
+        const isApi = buildReport[pageServerName] === 'api';
+        const isEvent = buildReport[pageServerName] === 'event';
+        const isCron = buildReport[pageServerName] === 'cron';
+        const isQGL = buildReport[pageServerName] === 'graphql';
 
-                                if (parsed.type === "connection_init") {
-                                    // Handle connection initiation
-                                    ws.send(JSON.stringify({ type: "connection_ack" }));
+        isStatic.set(pageServerName, isPage);
 
-                                } else if (parsed.type === "start") {
-                                    // Handle GraphQL subscription start
-                                    const { query, variables, operationName } = parsed.payload;
-                                    const resultIterator: any = await subscribe({
-                                        schema: buildSchema(gqlObject.schema),
-                                        document: gqlParser(query),
-                                        contextValue: gqlObject.context,
-                                        variableValues: variables,
-                                        operationName,
-                                        rootValue: gqlObject.resolvers,
-                                    });
+        if (isQGL) {
+            const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${page}.js`);
+            const gqlModule = require(filePath);
 
-                                    for await (const result of resultIterator) {
-                                        ws.send(
-                                            JSON.stringify({
-                                                type: "data",
-                                                id: parsed.id,
-                                                payload: result,
-                                            })
-                                        );
-                                    }
+            if (gqlModule) {
+                const gqlObject = gqlModule.default ? gqlModule.default : gqlModule;
+                if (gqlObject) {
+                    app.ws(page, {
+                        compression: uws.SHARED_COMPRESSOR,
+                        maxPayloadLength: 16 * 1024 * 1024,
+                        idleTimeout: 16,
 
+                        message: async (ws, message, isBinary) => {
+                            const data = Buffer.from(message).toString();
+                            const parsed = JSON.parse(data);
+
+                            if (parsed.type === "connection_init") {
+                                // Handle connection initiation
+                                ws.send(JSON.stringify({ type: "connection_ack" }));
+
+                            } else if (parsed.type === "start") {
+                                // Handle GraphQL subscription start
+                                const { query, variables, operationName } = parsed.payload;
+
+                                const schema = gqlObject.schema;
+                                const resultIterator: any = await subscribe({
+                                    schema: typeof schema === "string" ? buildSchema(schema) : schema,
+                                    document: gqlParser(query),
+                                    contextValue: gqlObject.context,
+                                    variableValues: variables,
+                                    operationName,
+                                    rootValue: gqlObject.resolvers,
+                                });
+
+                                for await (const result of resultIterator) {
+                                    ws.send(
+                                        JSON.stringify({
+                                            type: "data",
+                                            id: parsed.id,
+                                            payload: result,
+                                        })
+                                    );
                                 }
+
                             }
-                        })
-                    }
+                        }
+                    })
                 }
             }
+        }
 
-            const pageRouters = new Set([page, (`${page}/`).replace("//", "/")]);
-            let bundleAdded = false;
-            pageRouters.forEach((pageName) => {
-                if (isServer) {
-                    app.any(pageName, (res, req) => {
-                        return new RenderServer(getRenderProps(res, req, pageServerName))
-                    });
-                } else if (isEvent) {
-                    app.get(pageName, (res, req) => {
-                        return new RenderEvent(getRenderProps(res, req, pageServerName))
-                    })
-                } else if (isCron) {
-                    app.get(pageName, (res, req) => {
-                        return new RenderEvent(getRenderProps(res, req, pageServerName))
-                    })
-                } else if (isQGL) {
-                    app.any(pageName, (res, req) => {
-                        return new RenderGraphQL(getRenderProps(res, req, pageServerName))
-                    });
 
-                } else if (isApi || !isPage) {
-                    app.any(pageName, (res, req) => {
-                        return new RenderAPI(getRenderProps(res, req, pageServerName));
-                    })
-                } else if (isPage) {
-                    app.get(pageName, (res, req) => {
-                        const path = req.getUrl();
-                        if (!(path.endsWith(".bundle.js") || path.endsWith(".data.js"))) {
-                            return new RenderPage(getRenderProps(res, req, filePath));
-                        } else {
-                            return new RenderStatic(getRenderProps(res, req, pageServerName));
-                        }
-                    });
-                    if (!bundleAdded) {
-                        app.get(`${pageServerName}.bundle.js`, (res, req) => {
-                            if (env === "production") {
-                                //  cachingBundles(res);
-                            }
-                            return new RenderStatic(getRenderProps(res, req, pageServerName));
-                        })
+        const pageName = changePageToRoute(pageServerName);
 
-                        app.get(`${pageServerName}.data.js`, (res, req) => {
-                            const path = req.getUrl();
-                            const [pageName] = path.split(".");
-                            if (buildReport[pageName]) {
-                                return new RenderData(getRenderProps(res, req, pageServerName));
-                            } else {
-                                throw new Error("404");
-                            }
-                        })
-                        bundleAdded = true;
-                    }
-                } else {
-                    app.any(pageName, (res, req) => {
-                        return new RenderStatic(getRenderProps(res, req, pageServerName));
-                    })
-                }
 
+        if (isServer) {
+            app.get(pageName, (res, req) => {
+                return new RenderServer(getRenderProps(res, req, pageServerName))
+            });
+        } else if (isEvent) {
+            app.get(pageName, (res, req) => {
+                return new RenderEvent(getRenderProps(res, req, pageServerName))
             })
-        })
+        } else if (isCron) {
+            app.get(pageName, (res, req) => {
+                return new RenderEvent(getRenderProps(res, req, pageServerName))
+            })
+        } else if (isQGL) {
+            app.any(pageName, (res, req) => {
+                return new RenderGraphQL(getRenderProps(res, req, pageServerName))
+            });
+
+        } else if (isApi || !isPage) {
+            app.any(pageName, (res, req) => {
+                return new RenderAPI(getRenderProps(res, req, pageServerName));
+            })
+        } else if (isPage) {
+            app.get(pageName, (res, req) => {
+                const path = req.getUrl();
+                if (!(path.endsWith(".bundle.js") || path.endsWith(".data.js"))) {
+                    return new RenderPage(getRenderProps(res, req, filePath));
+                } else {
+                    return new RenderStatic(getRenderProps(res, req, pageServerName));
+                }
+            });
+            app.get(`${pageServerName}.bundle.js`, (res, req) => {
+                if (env === "production") {
+                    //  cachingBundles(res);
+                }
+                return new RenderStatic(getRenderProps(res, req, pageServerName));
+            })
+
+            app.get(`${pageServerName}.data.js`, (res, req) => {
+                const path = req.getUrl();
+                const [pageName] = path.split(".");
+                if (buildReport[pageName]) {
+                    return new RenderData(getRenderProps(res, req, pageServerName));
+                } else {
+                    throw new Error("404");
+                }
+            })
+        } else {
+            app.get(pageName, (res, req) => {
+                return new RenderStatic(getRenderProps(res, req, pageServerName));
+            })
+        }
+
+        app.get(`${pageName}/`, (res) => {
+            res.writeStatus('302')
+            res.writeHeader('location', pageName)
+            res.end()
+        });
+
+
+    })
 
     app.any("/*", async (res, req) => {
         return new RenderStatic(getRenderProps(res, req));

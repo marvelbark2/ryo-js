@@ -1,6 +1,6 @@
 import { join } from "path";
 
-import { generateClientBundle } from "./bundler-component.js";
+import { generateClientBundle } from "./bundle-component.js";
 import { existsSync, writeFileSync } from "fs"
 import { render } from "preact-render-to-string";
 import { createElement, h } from "preact";

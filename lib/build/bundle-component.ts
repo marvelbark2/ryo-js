@@ -1,8 +1,7 @@
-import type { Plugin } from "esbuild"
 import { join } from "path";
-import { build, analyzeMetafile } from "esbuild";
+import { build } from "esbuild";
 import compress from "@luncheon/esbuild-plugin-gzip";
-
+import ignorePlugin from "./plugins/ignore-comments";
 
 const fetchParams = (pageName: string) => {
     if (pageName.includes(':')) {
@@ -56,7 +55,7 @@ const getHydrationScript = async (filePath: string, pageName: string, data: any,
       const Parent = undefined;`}
 
   document.getElementById("${pageName}").innerHTML = "";
-
+  console.log(Component)
   if(window.getData) {
     const data = window.getData();
     const deserializedData = new window.framework.DESERIALIZE(data);
@@ -153,7 +152,10 @@ export async function generateClientBundle({
             platform: 'neutral',
             //target: ["chrome99", "firefox99", "safari15"],
 
-            plugins: [compress({ gzip: true })],
+            plugins: [
+                compress({ gzip: true }),
+                //ignorePlugin()
+            ],
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
             keepNames: /**process.env.NODE_ENV === "development" */ true,
             metafile: true,

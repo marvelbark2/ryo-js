@@ -66,10 +66,9 @@ async function getScript(outdir: string, pageName: string, path: string, tsConfi
             [pageName]: path
         },
         bundle: true,
-        plugins: [
-            externalNativeModulesPlugin
-        ],
-        format: "esm",
+        jsxFactory: 'h',
+        jsxFragment: 'Fragment',
+        jsx: "automatic",
         platform: "node",
         outdir: outFunc,
         //external: ["pg-native"],

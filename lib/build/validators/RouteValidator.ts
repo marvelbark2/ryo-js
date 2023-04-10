@@ -5,7 +5,8 @@ interface RouteValidatorConstructor {
 }
 
 interface RouteValidatorRule {
-    execute: () => void
+    name: string
+    execute: () => void | Error
 }
 
 
@@ -19,9 +20,14 @@ interface RouteNode {
 export default class RouteValidator {
     private rules: RouteValidatorRule[] = []
     private routes: RouteNode[] = []
+    private errors: Error[] = [];
     constructor(private opts: RouteValidatorConstructor) {
+        this.init()
+    }
+
+    init() {
         this.convertToTree()
-        //console.log(JSON.stringify(this.routes[0]))
+        this.initRules()
     }
 
     convertToTree() {
@@ -54,6 +60,41 @@ export default class RouteValidator {
         })
 
         this.routes = tree
+    }
+
+    initRules() {
+        this.rules.push({
+            name: "Levels bounds",
+            execute: () => {
+                function checkNodesAndChildren(node: RouteNode | null): boolean {
+                    if (node === null || node.children === null) return true;
+                    const x = node.children.some((x) => x.name === node.name);
+
+                    if (!x) {
+                        return node.children.some((x) => checkNodesAndChildren(x))
+                    }
+                    return false;
+                }
+
+                const v = this.routes.some(checkNodesAndChildren);
+
+                if (!v)
+                    return new Error("Bad Routes boundry");
+
+            }
+        })
+    }
+
+    startValidation() {
+        this.rules.every((rule) => {
+            const exec = rule.execute();
+            if (exec instanceof Error) {
+                this.errors.push(exec);
+                return false;
+            }
+
+            return true;
+        });
     }
 
     printTrace() {

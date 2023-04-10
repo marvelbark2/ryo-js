@@ -1,13 +1,14 @@
 import { build } from "esbuild"
-import { join } from "path";
 
+//render(CE, document.getElementById("${id}"))
 
 const getHydrationScript = (filePath: string, data: any, id: string, suspend?: boolean) => `
+    import "preact/debug";
     import { default as Component } from "${filePath}";
-    import {hydrate, createElement} from "preact"
+    import {hydrate, h, render} from "preact"
 
-    const Element = createElement(Component,{ data: ${JSON.stringify(data)} });
-    hydrate(Element, document.getElementById("${id}"))
+    const CE = h(Component, { data: ${JSON.stringify(data)} });
+    render(CE, document.getElementById("root"))
 `;
 
 export async function generateClientBundle({

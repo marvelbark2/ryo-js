@@ -12,7 +12,7 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
 - Routing based filesystem
 - Blazly fast (Try it by yourself)
 - Everything on src folder
-- Create apis, websockets, graphQL, server files and preact components
+- Create apis, websockets, graphQL, preact components and serve static files.
 - SPA routing which makes the site so fast (Using Flamethrower)
 - Typescript (No types generated at least for now) supported without configuration needed (Example: https://github.com/marvelbark2/ryo-js-examples/blob/main/ryo-api/src/me.ts)
 

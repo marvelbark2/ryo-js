@@ -1,9 +1,10 @@
 import type uws from 'uWebSockets.js';
 
 import { join } from 'path';
-import { Fragment, createElement } from 'preact';
-import render from 'preact-render-to-string';
-import { Readable, Stream } from 'stream';
+import { Fragment, createElement, h } from 'preact';
+import { render } from "preact-render-to-string";
+
+import { Readable } from 'stream';
 import { createReadStream, existsSync, statSync } from 'fs';
 import { gzip } from 'zlib';
 
@@ -12,6 +13,7 @@ import { Serializer } from '../utils/serializer';
 import ps from "../utils/pubsub";
 import logger from '../utils/logger';
 import EntryClient from '../entry';
+
 
 /** TODOS:
  * Render Errors: Class handling errors contains methods to handle errors (render404 ...), Logging errors, and sending errors to the client
@@ -32,6 +34,82 @@ interface RenderErrorProps extends RenderProps {
     error: number;
 }
 
+const renderStatic = {
+    toArrayBuffer(buffer: Buffer) {
+        return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    },
+
+    /* Either onAborted or simply finished request */
+    onAbortedOrFinishedResponse(res: uws.HttpResponse, readStream: Readable) {
+
+        if (res.id === -1) {
+            logger.log('error', "onAbortedOrFinishedResponse called twice for the same res!")
+        } else {
+            readStream.destroy();
+        }
+
+        /* Mark this response already accounted for */
+        res.id = -1;
+    },
+
+    /* Helper function to pipe the ReadaleStream over an Http responses */
+    pipeStreamOverResponse(res: uws.HttpResponse, readStream: Readable, totalSize: number, err: (e: any) => void) {
+        /* Careful! If Node.js would emit error before the first res.tryEnd, res will hang and never time out */
+        /* For this demo, I skipped checking for Node.js errors, you are free to PR fixes to this example */
+        readStream.on('data', (chunk) => {
+            /* We only take standard V8 units of data */
+            const ab = this.toArrayBuffer(chunk);
+
+            /* Store where we are, globally, in our response */
+            const lastOffset = res.getWriteOffset();
+
+            /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
+            const [ok, done] = res.tryEnd(ab, totalSize);
+
+            /* Did we successfully send last chunk? */
+            if (done) {
+                this.onAbortedOrFinishedResponse(res, readStream);
+            } else if (!ok) {
+                /* If we could not send this chunk, pause */
+                readStream.pause();
+
+                /* Save unsent chunk for when we can send it */
+                res.ab = ab;
+                res.abOffset = lastOffset;
+
+                /* Register async handlers for drainage */
+                res.onWritable((offset) => {
+                    /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
+
+                    /* On failure the timeout will start */
+                    const [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
+                    if (done) {
+                        this.onAbortedOrFinishedResponse(res, readStream);
+                    } else if (ok) {
+                        /* We sent a chunk and it was not the last one, so let's resume reading.
+                         * Timeout is still disabled, so we can spend any amount of time waiting
+                         * for more chunks to send. */
+                        readStream.resume();
+                    }
+
+                    /* We always have to return true/false in onWritable.
+                     * If you did not send anything, return true for success. */
+                    return ok;
+                });
+            }
+
+        }).on('error', (e) => {
+            /* Todo: handle errors of the stream, probably good to simply close the response */
+            err(e);
+        });
+
+        /* If you plan to asyncronously respond later on, you MUST listen to onAborted BEFORE returning */
+        res.onAborted(() => {
+            this.onAbortedOrFinishedResponse(res, readStream);
+        });
+    }
+}
+
 export abstract class AbstractRender {
     static PWD = process.cwd();
     static RequireCaches = new Set<string>();
@@ -50,7 +128,29 @@ export abstract class AbstractRender {
          */
 
         if (this.options.render === false) return;
-        this.render();
+
+        const { req, pathname } = this.options;
+
+        if (pathname.includes(":")) {
+            const url = req.getUrl();
+            const pathFile = join(AbstractRender.PWD, ".ssr", "output", "static", url);
+            if (existsSync(pathFile)) {
+                const readable = createReadStream(pathFile);
+                renderStatic.pipeStreamOverResponse(
+                    this.options.res,
+                    readable,
+                    readable.bytesRead,
+                    (e) => {
+                        logger.log("error", e);
+                        this.render404();
+                    }
+                )
+            } else {
+                this.render();
+            }
+        } else {
+            this.render();
+        }
     }
 
     abstract render(): void;
@@ -85,10 +185,10 @@ export abstract class AbstractRender {
         }
     }
 
-    getModuleFromPage(isDev = false) {
+    getModuleFromPage(isDev = false, isGraphql = false) {
         const { pathname: pageName, req } = this.options;
         const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
-        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${pageName}${xVersion ? (`@${xVersion}`) : ""}.js`);
+        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${(isGraphql && xVersion) ? pageName.replace(".gql", "") : pageName}${xVersion ? (`@${xVersion}${isGraphql ? ".gql" : ""}`) : ""}.js`);
         if (isDev) {
             AbstractRender.RequireCaches.add(filePath);
         }
@@ -210,15 +310,14 @@ export class RenderServer extends AbstractRender {
             const Wrapper = existsSync(join(process.cwd(), "entry.jsx")) ? require(join(process.cwd(), "entry.jsx")).default : EntryClient;
             const ParentLayout = component.Parent || Wrapper;
 
-            const Parent = createElement(ParentLayout, { Child: null, id: path }, null);
+            const App = component.default;
+
 
             const serverData = dataFn ? ((typeof dataFn.then === "function") ? await dataFn : dataFn) : ({
 
             });
 
-
             if (serverData.status) {
-                console.log(serverData.status)
                 res.writeStatus(serverData.status.toString());
             } else {
                 res.writeStatus("200 OK");
@@ -233,11 +332,16 @@ export class RenderServer extends AbstractRender {
                 }
             }
 
-            const html = render(Parent, null);
+            const data = serverData.body;
 
-            const head = render(serverData.head || Fragment, null);
+            const Element = h(App, { data: data ?? null }, null);
+            const Parent = createElement(Wrapper, { Parent: ParentLayout, Child: Element, id: path });
 
-            const clientBundle = await generateClientBundle({ filePath: componentPath, data: serverData.body, id: path, suspend: isAsync });
+            const html = render(Parent);
+
+            const head = serverData.head ? render(serverData.head || Fragment) : "";
+
+            const clientBundle = await generateClientBundle({ filePath: componentPath, data: data, id: path, suspend: isAsync });
 
             const finalHtml = `
             <!DOCTYPE html>
@@ -250,7 +354,6 @@ export class RenderServer extends AbstractRender {
                 <body>
                     <div id="root">${html}</div>
                     <script>
-                        window.__PRELOADED_STATE__ = ${JSON.stringify({})};
                         ${clientBundle ? clientBundle.outputFiles?.[0].text : ""}
                     </script>
                 </body>
@@ -363,24 +466,20 @@ export class RenderAPI extends Streamable {
             res.onAborted(() => {
                 res.aborted = true;
             });
-            const method = req.getMethod();
+            const method = req.getMethod().toLowerCase();
             const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
             const api = this.getAPIMethod(pageName, method, xVersion);
             if (api) {
                 const dataCall = api({
                     url: pageName,
-                    body: async () => {
-                        if (method !== "get") {
-                            return await new Promise((resolve, reject) => {
-                                this.readJson(res, (obj: Buffer | string) => {
-                                    resolve(obj);
-                                }, () => {
-                                    /* Request was prematurely aborted or invalid or missing, stop reading */
-                                    reject('Invalid JSON or no data at all!');
-                                })
-                            })
-                        }
-                    },
+                    body: method !== "get" ? async () => await new Promise((resolve, reject) => {
+                        this.readJson(res, (obj: Buffer | string) => {
+                            resolve(obj);
+                        }, () => {
+                            /* Request was prematurely aborted or invalid or missing, stop reading */
+                            reject('Invalid JSON or no data at all!');
+                        })
+                    }) : undefined,
                     params: () => {
                         // TODO: add support for query params
                         const params = pageName.includes(":") ? this.getParams() : undefined;
@@ -418,14 +517,15 @@ export class RenderAPI extends Streamable {
                             error: 500
                         })
                     }
-                    const stream: Stream = data.stream;
+                    const stream: Readable = data.stream;
+
                     stream.on("error", (e) => {
                         logger.error(e);
                         return this.renderError({
                             error: 500
                         })
                     });
-                    this.pipeStreamOverResponse(res, data.stream, data.length);
+                    this.pipeStreamOverResponse(res, stream, data.length);
                 } else {
                     res.writeHeader("Content-Type", "application/json");
                     return res.end(JSON.stringify(data));
@@ -520,7 +620,7 @@ export class RenderGraphQL extends Streamable {
         try {
             const method = req.getMethod().toLowerCase();
             if (method === "post") {
-                const gqlModule = this.getModuleFromPage(this.options.isDev);
+                const gqlModule = this.getModuleFromPage(this.options.isDev, true);
 
                 if (!gqlModule) {
                     return this.renderError({
@@ -549,8 +649,9 @@ export class RenderGraphQL extends Streamable {
 
                 try {
                     const { graphql, buildSchema } = await import("graphql");
+                    const schema = gqlObject.schema;
                     const result = await graphql({
-                        schema: buildSchema(gqlObject.schema),
+                        schema: typeof schema === "string" ? buildSchema(schema) : schema,
                         source: data.query,
                         variableValues: data?.variables,
                         rootValue: gqlObject?.resolvers,
