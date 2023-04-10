@@ -46,20 +46,20 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
 
 
 ## Progress Status:
-    - Preact Components
-      - [X] Async static component
-      - [X] Sync static component
-      - [X] Server Component
-      - [] Server Component with hooks
-    - Api
-      - [X] JSON api
-      - [X] Readable stream api
-    - GraphQL
-      - [X] Query
-      - [X] Mutation
-      - []  Subscription
-    - [X] Websockets
-    - [X] Server-Sent-Events
+- Preact Components
+  - [X] Async static component
+  - [X] Sync static component
+  - [X] Server Component
+  - [] Server Component with hooks
+- Api
+  - [X] JSON api
+  - [X] Readable stream api
+- GraphQL
+  - [X] Query
+  - [X] Mutation
+  - []  Subscription
+- [X] Websockets
+- [X] Server-Sent-Events
 ## Example:
 
 ### websockets:
