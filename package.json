@@ -1,7 +1,7 @@
 {
   "name": "ryo.js",
   "version": "0.0.0-meme.30",
-  "description": "Fullstack framework",
+  "description": "Ryo-js is a fullstack framework for building universal web applications with preact and graphql.",
   "sideEffects": false,
   "scripts": {
     "start": "node lib/index.module.js",
