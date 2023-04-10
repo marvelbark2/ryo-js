@@ -74,6 +74,7 @@ async function getScript(outdir: string, pageName: string, path: string, tsConfi
         //external: ["pg-native"],
         target: 'node14',
         tsconfig: tsConfig,
+        format: "esm",
         external: [...(pkg.dependencies ? Object.keys(pkg.dependencies) : []), ...(pkg.devDependencies ? Object.keys(pkg.devDependencies) : [])],
     });
 

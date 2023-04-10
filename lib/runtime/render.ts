@@ -1,7 +1,7 @@
 import type uws from 'uWebSockets.js';
 
 import { join } from 'path';
-import { Fragment, createElement, h } from 'preact';
+import { Fragment, h } from 'preact';
 import { render } from "preact-render-to-string";
 
 import { Readable } from 'stream';
@@ -288,6 +288,11 @@ export class Streamable extends AbstractRender {
         });
     }
 }
+
+
+const isAsyncFn = (fn: any) => {
+    return fn.constructor.name === "AsyncFunction";
+}
 export class RenderServer extends AbstractRender {
 
     async render() {
@@ -303,7 +308,7 @@ export class RenderServer extends AbstractRender {
             splittedPath.pop();
             const component = require(componentPath);
 
-            const isAsync = component.constructor.name === "AsyncFunction";
+            const isAsync = false;
 
             const dataFn = component.server({ req });
 
@@ -334,10 +339,10 @@ export class RenderServer extends AbstractRender {
 
             const data = serverData.body;
 
-            const Element = h(App, { data: data ?? null }, null);
-            const Parent = createElement(Wrapper, { Parent: ParentLayout, Child: Element, id: path });
+            const Element = h(App, {});
+            //            const Parent = h(Wrapper, { Parent: ParentLayout, id: path }, Element);
 
-            const html = render(Parent);
+            const html = render(Element);
 
             const head = serverData.head ? render(serverData.head || Fragment) : "";
 

@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.29",
+  "version": "0.0.0-meme.30",
   "description": "Fullstack framework",
   "sideEffects": false,
   "scripts": {
@@ -42,7 +42,7 @@
     "ryo": "./dist/cjs/index.js"
   },
   "peerDependencies": {
-    "preact": "^10.13.2",
+    "preact": "latest",
     "react": "npm:@preact/compat",
     "react-dom": "npm:@preact/compat"
   },
@@ -72,7 +72,6 @@
     "node-fetch": "^2.6.7",
     "postcss-cli": "^10.1.0",
     "preact-render-to-string": "6.0.2",
-    "preact-server-renderer": "0.3.1",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.20.0",
     "winston": "3.8.2"
   },
