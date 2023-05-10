@@ -7,6 +7,8 @@ import { createElement, h } from "preact";
 import { build, analyzeMetafile } from "esbuild";
 import { getProjectPkg } from "../utils/global.js";
 import EntryClient from "../entry";
+import { Serializer } from "../utils/serializer.js";
+import { minify } from "html-minifier";
 
 const projectPkg = getProjectPkg()
 async function generateData(filePath: string, pageName: string, tsconfig?: string) {
@@ -15,8 +17,7 @@ async function generateData(filePath: string, pageName: string, tsconfig?: strin
     const result = await build({
       stdin: {
         contents: `
-        import { data } from "${filePath}";
-        export { data };
+        export {data} from "${filePath}"
       `,
         resolveDir: process.cwd(),
       },
@@ -28,7 +29,24 @@ async function generateData(filePath: string, pageName: string, tsconfig?: strin
       outfile: join(".ssr/output/server/data", `${pageName}.data.js`),
       tsconfig: tsconfig,
       platform: "node",
-      external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})].filter(x => !x.includes('ryo.js')),
+      plugins: [
+        {
+          name: 'no-side-effects',
+          setup(build) {
+            build.onResolve({ filter: /.*/ }, async args => {
+              if (args.pluginData) return // Ignore this if we called ourselves
+
+              const { path, ...rest } = args
+              rest.pluginData = true // Avoid infinite recursion
+              const result = await build.resolve(path, rest)
+
+              result.sideEffects = false
+              return result
+            })
+          }
+        }
+      ],
+      external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {}), "react", "preact"].filter(x => !x.includes('ryo.js')),
     })
 
     if (result.metafile) {
@@ -41,6 +59,17 @@ async function generateData(filePath: string, pageName: string, tsconfig?: strin
   } catch (error) {
     throw new Error(`Error while generating data for ${pageName}. ${error}`);
   }
+}
+
+async function saveDataIntoJson({ data, pageName }: { data: any; pageName: string; }) {
+  const filePath = join(process.cwd(), ".ssr/output/server/data", `${pageName}.data.json`)
+  const serialize = new Serializer(data)
+
+  const payload = await Promise.resolve(serialize.toJSON())
+
+  writeFileSync(
+    filePath, (payload)
+  )
 }
 
 
@@ -68,6 +97,8 @@ export async function createStaticFile(
         data = await Component.data.runner();
       }
       await generateData(filePath, pageName, tsconfig);
+      await saveDataIntoJson({ data, pageName });
+
     }
 
     if (options?.bundle) {
@@ -77,24 +108,30 @@ export async function createStaticFile(
     const Element = h(App, { data: data ?? null }, null);
     const Parent = createElement(Wrapper, { Parent: ParentLayout, Child: Element, id: pageName }, Element);
 
-
+    const html = `<!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <link rel="preload" href="/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+      <noscript><link rel="stylesheet" href="/styles.css"></noscript>    
+      <script src="/framework-system.js" defer></script>
+    </head>
+    <body>
+      <div id="root">${render(Parent)}</div>
+      ${Component.data ? `<script src="/${pageName}.data.js" ></script>` : ''}
+      <script src="/${pageName}.bundle.js" defer></script>
+    </body>
+    </html>`;
     writeFileSync(
       join(outdir, options?.fileName || `${pageName}.html`),
-      `<!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <link rel="preload" href="/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-          <noscript><link rel="stylesheet" href="/styles.css"></noscript>    
-          <script src="/framework-system.js" defer></script>
-        </head>
-        <body>
-          <div id="root">${render(Parent)}</div>
-          ${Component.data ? `<script src="/${pageName}.data.js" ></script>` : ''}
-          <script src="/${pageName}.bundle.js" defer></script>
-        </body>
-        </html>`
+      minify(html, {
+        collapseWhitespace: true,
+        removeComments: true,
+        minifyJS: true,
+        minifyCSS: true
+
+      })
     );
 
   } catch (error) {
@@ -102,3 +139,5 @@ export async function createStaticFile(
     throw error;
   }
 }
+
+

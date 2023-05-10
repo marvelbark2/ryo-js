@@ -42,6 +42,9 @@ export async function generateClientBundle({
                 platform: "node",
                 external: ["pg-native"],
                 format: "esm",
+                define: {
+                    'process.env.NODE_ENV': `"${process.env.NODE_ENV}"`,
+                },
             }
         );
     } catch (e) {

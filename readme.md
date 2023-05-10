@@ -338,6 +338,28 @@ export default {
 
 ```
 
+### Middleware:
+You can add middleware by adding a file in root of the project: **middleware.(ts|js)**
+
+#### Example:
+
+```js
+//path: middleware.js
+
+const getCookie = (req, name) => 
+(req.cookies ??= req.getHeader('cookie')).match(getCookie[name] ??= new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2]
+
+export default function middleware(req, res, next) {
+    const user = getCookie(req, "user")
+    if (user) {
+        return next();
+    } else {
+        res.writeHeader("Set-Cookie", "user=Guest")
+        return res.writeStatus("401").end("You are not authorized")
+    }
+}
+
+```
 ### More examples:
 https://github.com/marvelbark2/ryo-js-examples
 

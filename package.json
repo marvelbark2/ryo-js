@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.30",
+  "version": "0.0.0-meme.31",
   "description": "Ryo-js is a fullstack framework for building universal web applications with preact and graphql.",
   "sideEffects": false,
   "scripts": {
@@ -49,6 +49,7 @@
   "devDependencies": {
     "@chialab/esbuild-plugin-postcss": "^0.17.2",
     "@types/babel__register": "^7.17.0",
+    "@types/html-minifier": "4.0.2",
     "@types/node": "^18.15.11",
     "@types/node-fetch": "^2.6.3",
     "babel-preset-es2015": "^6.24.1",
@@ -62,18 +63,22 @@
     "@babel/plugin-transform-react-jsx": "^7.21.0",
     "@babel/preset-env": "^7.21.4",
     "@babel/register": "^7",
-    "babel-preset-preact": "^2.0.0",
     "@luncheon/esbuild-plugin-gzip": "^0.1.0",
+    "babel-preset-preact": "^2.0.0",
     "flamethrower-router": "^0.0.0-meme.12",
     "graphql": "16.6.0",
-    "graphql-ws": "5.12.1",
+    "html-minifier": "4.0.0",
     "is-native-module": "1.1.3",
     "module-from-string": "^3.3.0",
+    "next-super-performance": "0.0.1",
     "node-fetch": "^2.6.7",
     "postcss-cli": "^10.1.0",
     "preact-render-to-string": "6.0.2",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.20.0",
     "winston": "3.8.2"
+  },
+  "resolutions": {
+    "graphql": "16.6.0"
   },
   "files": [
     "dist/cjs"

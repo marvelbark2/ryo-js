@@ -22,7 +22,7 @@ export async function generateServerScript({
         ...bundleConstants,
         entryPoints: [comp],
         bundle: true,
-        target: "node14",
+        target: "esnext",
         format: "esm",
         platform: "node",
         outfile: out,

@@ -14,12 +14,28 @@ import { Serializer } from "./utils/serializer";
 import logger from "./utils/logger";
 
 import { buildSchema, parse as gqlParser, subscribe } from "graphql";
+import { getAsyncValue } from "./utils/global";
 
 
 
 let uwsToken: uws.us_listen_socket | null;
 const requireCaches = new Set<string>()
 const shouldRestart: string[] = [];
+
+const pwd = process.cwd();
+
+
+function getMiddleware() {
+    const path = ".ssr/output/middleware.js";
+    const middlewarePath = join(pwd, path);
+
+    if (existsSync(middlewarePath)) {
+        const middleware = require(middlewarePath);
+        return middleware.default ? middleware.default : middleware;
+    } else {
+        return (_req: any, _res: any, next: any) => next();
+    }
+}
 
 // TODO: Convert renders to abstracted classes
 export default function server(env = "production") {
@@ -30,7 +46,6 @@ export default function server(env = "production") {
         compact: true,
     });
     const _require = require;
-    const pwd = process.cwd();
 
     shouldRestart.push("N");
 
@@ -67,6 +82,8 @@ export default function server(env = "production") {
         const route = page.replace("/index", "")
         return route.length > 1 ? route : "/";
     }
+
+    const middlewareFn = getMiddleware();
 
     x.forEach((pageServerName) => {
         const filePath = join(pwd, ".ssr", "output", "static", `${pageServerName}.html`)
@@ -106,8 +123,10 @@ export default function server(env = "production") {
                                 const { query, variables, operationName } = parsed.payload;
 
                                 const schema = gqlObject.schema;
+                                const execSchema = typeof schema === "string" ? buildSchema(schema) : await getAsyncValue(schema);
+
                                 const resultIterator: any = await subscribe({
-                                    schema: typeof schema === "string" ? buildSchema(schema) : schema,
+                                    schema: execSchema,
                                     document: gqlParser(query),
                                     contextValue: gqlObject.context,
                                     variableValues: variables,
@@ -137,12 +156,12 @@ export default function server(env = "production") {
 
 
         if (isServer) {
-            app.get(pageName, (res, req) => {
-                return new RenderServer(getRenderProps(res, req, pageServerName))
+            app.any(pageName, (res, req) => {
+                return middlewareFn(req, res, () => new RenderServer(getRenderProps(res, req, pageServerName)))
             });
         } else if (isEvent) {
             app.get(pageName, (res, req) => {
-                return new RenderEvent(getRenderProps(res, req, pageServerName))
+                return middlewareFn(req, res, () => new RenderEvent(getRenderProps(res, req, pageServerName)));
             })
         } else if (isCron) {
             app.get(pageName, (res, req) => {
@@ -150,44 +169,61 @@ export default function server(env = "production") {
             })
         } else if (isQGL) {
             app.any(pageName, (res, req) => {
-                return new RenderGraphQL(getRenderProps(res, req, pageServerName))
+                return middlewareFn(
+                    req, res, () => new RenderGraphQL(getRenderProps(res, req, pageServerName))
+                )
             });
 
         } else if (isApi || !isPage) {
             app.any(pageName, (res, req) => {
-                return new RenderAPI(getRenderProps(res, req, pageServerName));
+                return middlewareFn(
+                    req, res, () => new RenderAPI(getRenderProps(res, req, pageServerName))
+                )
             })
         } else if (isPage) {
             app.get(pageName, (res, req) => {
-                const path = req.getUrl();
-                if (!(path.endsWith(".bundle.js") || path.endsWith(".data.js"))) {
-                    return new RenderPage(getRenderProps(res, req, filePath));
-                } else {
-                    return new RenderStatic(getRenderProps(res, req, pageServerName));
-                }
+                return middlewareFn(
+                    req, res,
+                    () => {
+                        const path = req.getUrl();
+                        if (!(path.endsWith(".bundle.js") || path.endsWith(".data.js"))) {
+                            return new RenderPage(getRenderProps(res, req, filePath));
+                        } else {
+                            return new RenderStatic(getRenderProps(res, req, pageServerName));
+                        }
+                    }
+                )
             });
             app.get(`${pageServerName}.bundle.js`, (res, req) => {
-                if (env === "production") {
-                    //  cachingBundles(res);
-                }
-                return new RenderStatic(getRenderProps(res, req, pageServerName));
+                return middlewareFn(
+                    req, res,
+                    () => {
+                        if (env === "production") {
+                            //  cachingBundles(res);
+                        }
+                        return new RenderStatic(getRenderProps(res, req, pageServerName));
+
+                    }
+                )
             })
 
             app.get(`${pageServerName}.data.js`, (res, req) => {
-                const path = req.getUrl();
-                const [pageName] = path.split(".");
-                if (buildReport[pageName]) {
-                    return new RenderData(getRenderProps(res, req, pageServerName));
-                } else {
-                    throw new Error("404");
-                }
+                return middlewareFn(req, res, () => {
+                    const path = req.getUrl();
+                    const [pageName] = path.split(".");
+                    if (buildReport[pageName]) {
+                        return new RenderData(getRenderProps(res, req, pageServerName));
+                    } else {
+                        throw new Error("404");
+                    }
+                })
             })
         } else {
             app.get(pageName, (res, req) => {
-                return new RenderStatic(getRenderProps(res, req, pageServerName));
+                return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req, pageServerName)));
+
             })
         }
-
         app.get(`${pageName}/`, (res) => {
             res.writeStatus('302')
             res.writeHeader('location', pageName)
@@ -197,8 +233,8 @@ export default function server(env = "production") {
 
     })
 
-    app.any("/*", async (res, req) => {
-        return new RenderStatic(getRenderProps(res, req));
+    app.get("/*", async (res, req) => {
+        return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
     })
 
     function loadWSEndpoints() {

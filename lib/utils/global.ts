@@ -24,3 +24,11 @@ export async function getProjectPkg() {
     const pkg = await import(join(process.cwd(), "package.json"));
     return pkg;
 }
+
+export async function getAsyncValue<T>(value: T | Promise<T>) {
+    if (value instanceof Promise) {
+        return await value;
+    } else {
+        return value;
+    }
+}

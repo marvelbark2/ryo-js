@@ -144,7 +144,7 @@ async function buildClient() {
                 }
             });
 
-            await Promise.all(allBuilds);
+            await Promise.all([...allBuilds, buildMiddleware()]);
 
             generateFrameworkJSBundle();
 
@@ -178,6 +178,22 @@ function copyPublicFiles() {
     }
 }
 
+async function buildMiddleware() {
+    const middleware = join(process.cwd(), "middleware");
+    let path = null;
+    if (existsSync(middleware + ".ts")) {
+        path = (middleware + ".ts");
+    } else if (existsSync(middleware + ".js")) {
+        path = (middleware + ".js");
+    }
+
+    if (path) {
+        console.time(`🕧 Building: middleware`);
+        await generateServerScript({ comp: path, outdir: join(".ssr", "output"), pageName: "middleware" });
+        console.timeEnd(`✅ Building: middleware`);
+        return true;
+    }
+}
 
 export default async function build() {
     try {

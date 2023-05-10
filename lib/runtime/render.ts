@@ -5,7 +5,7 @@ import { Fragment, h } from 'preact';
 import { render } from "preact-render-to-string";
 
 import { Readable } from 'stream';
-import { createReadStream, existsSync, statSync } from 'fs';
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { gzip } from 'zlib';
 
 import { generateClientBundle } from './transpilor';
@@ -13,6 +13,7 @@ import { Serializer } from '../utils/serializer';
 import ps from "../utils/pubsub";
 import logger from '../utils/logger';
 import EntryClient from '../entry';
+import { getAsyncValue } from '../utils/global';
 
 
 /** TODOS:
@@ -310,7 +311,18 @@ export class RenderServer extends AbstractRender {
 
             const isAsync = false;
 
-            const dataFn = component.server({ req });
+            const reqObj: any = req;
+
+            reqObj.getBody = async () => await new Promise((resolve, reject) => {
+                res.onData((message, isLast) => {
+                    // TODO: is content type is json then parse or then check other
+                    resolve(message);
+                });
+            });
+
+            const dataFn = component.server({
+                req: reqObj
+            });
 
             const Wrapper = existsSync(join(process.cwd(), "entry.jsx")) ? require(join(process.cwd(), "entry.jsx")).default : EntryClient;
             const ParentLayout = component.Parent || Wrapper;
@@ -372,7 +384,6 @@ export class RenderServer extends AbstractRender {
             });
         }
     }
-
     renderDev() {
         this.render();
     }
@@ -464,6 +475,187 @@ export class RenderEvent extends AbstractRender {
     }
 
 }
+
+
+
+// export const EX = {
+//     render: async function (options: any): Promise<any> {
+//         const { res, req, pathname: pageName } = options;
+//         console.log("Render from EX method")
+//         try {
+//             res.onAborted(() => {
+//                 res.aborted = true;
+//             });
+//             const method = req.getMethod().toLowerCase();
+//             const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
+//             const api = this.getAPIMethod(options, pageName, method, xVersion);
+//             if (api) {
+//                 const dataCall = api({
+//                     url: pageName,
+//                     body: method !== "get" ? async () => await new Promise((resolve, reject) => {
+//                         this.readJson(res, (obj: Buffer | string) => {
+//                             resolve(obj);
+//                         }, () => {
+//                             /* Request was prematurely aborted or invalid or missing, stop reading */
+//                             reject('Invalid JSON or no data at all!');
+//                         })
+//                     }) : undefined,
+//                     params: () => {
+//                         // TODO: add support for query params
+//                         const params = pageName.includes(":") ? this.getParams(options) : undefined;
+//                         return params ? Object.fromEntries(params) : undefined
+//                     },
+//                     headers: () => {
+//                         const headers = new Map();
+//                         req.forEach((key: string, value: string) => {
+//                             headers.set(key, value);
+//                         });
+//                         return headers;
+//                     },
+//                     setCookie: (key: string, value: string, options: string[][] = []) => {
+//                         if (options.length === 0) {
+//                             res.writeHeader("Set-Cookie", `${key}=${value}`);
+//                         } else {
+//                             res.writeHeader("Set-Cookie", `${key}=${value};${options.map(x => `${x[0]}=${x[1]}`).join(";")}`);
+//                         }
+//                     },
+//                     writeHeader: (key: string, value: string) => {
+//                         res.writeHeader(key, value);
+//                     },
+//                     status: (code: number) => {
+//                         res.writeStatus(code.toString());
+//                     }
+
+//                 });
+//                 const data = dataCall.then ? await dataCall : dataCall;
+
+//                 if (data.stream) {
+//                     if (!data.length) {
+
+//                         logger.error("Error reading stream");
+//                         return res.end("Error 500")
+//                     }
+//                     const stream: Readable = data.stream;
+
+//                     stream.on("error", (e) => {
+//                         logger.error(e);
+//                         return res.end("Error 500");
+//                     });
+//                     renderStatic.pipeStreamOverResponse(res, stream, data.length, console.error);
+//                 } else {
+//                     res.writeHeader("Content-Type", "application/json");
+//                     return res.end(JSON.stringify(data));
+//                 }
+//             } else {
+//                 return res.end("Error 401");
+//             }
+
+//         } catch (e) {
+//             logger.error(e);
+//             return res.end('Error 404');
+//         }
+//     },
+
+//     renderDev() {
+//         logger.debug("RenderAPI.renderDev");
+//     },
+
+//     getModuleFromPage(options: any, isDev = false, isGraphql = false) {
+//         const { pathname: pageName, req } = options;
+//         const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
+//         const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${(isGraphql && xVersion) ? pageName.replace(".gql", "") : pageName}${xVersion ? (`@${xVersion}${isGraphql ? ".gql" : ""}`) : ""}.js`);
+//         if (isDev) {
+//             AbstractRender.RequireCaches.add(filePath);
+//         }
+//         return require(filePath);
+//     },
+
+//     getAPIMethod(options: any, pageName: string, methodName: string, version: string): any {
+//         const cacheAPIMethods = AbstractRender.CACHE_API_METHODS;
+//         const isDev = process.env.NODE_ENV !== 'production'
+//         if (isDev) {
+//             const api = this.getModuleFromPage(options, isDev);
+//             const result = api[methodName];
+//             if (!result) return undefined;
+//             return result;
+//         } else {
+//             const key = `${pageName}${version ? `@${version}` : ""}.${methodName}`;
+//             if (cacheAPIMethods.has(key)) {
+//                 return cacheAPIMethods.get(key);
+//             } else {
+//                 const api = this.getModuleFromPage(options, isDev);
+//                 const result = api[methodName];
+//                 if (!result) return undefined;
+//                 cacheAPIMethods.set(key, result);
+//                 return result;
+//             }
+//         }
+//     },
+
+//     readJson(res: uws.HttpResponse, cb: any, err: any) {
+//         let buffer: Buffer | null = null;
+//         let bytes = 0;
+//         /* Register data cb */
+//         res.onData((ab, isLast) => {
+//             const chunk = Buffer.from(ab);
+//             bytes += chunk.length;
+
+//             if (isLast) {
+//                 if (bytes === 0) {
+//                     cb(undefined);
+//                     return;
+//                 }
+//                 let json;
+//                 if (buffer) {
+//                     try {
+//                         json = JSON.parse(Buffer.concat([buffer, chunk]) as any);
+//                     } catch (e) {
+//                         /* res.close calls onAborted */
+//                         cb(Buffer.concat([buffer, chunk]))
+//                         return;
+//                     }
+//                     cb(json);
+//                 } else {
+//                     try {
+//                         json = JSON.parse(chunk as any);
+//                     } catch (e) {
+//                         /* res.close calls onAborted */
+//                         cb(chunk)
+//                         return;
+//                     }
+//                     cb(json);
+//                 }
+//             } else {
+//                 if (buffer) {
+//                     buffer = Buffer.concat([buffer, chunk]);
+//                 } else {
+//                     buffer = Buffer.concat([chunk]);
+//                 }
+//             }
+//         });
+
+//         res.onAborted(err);
+
+//     },
+//     getParams(options: any): any {
+//         const { req, pathname: pageName } = options;
+//         const paths = pageName.split("/").filter((x: string) => x.startsWith(":"));
+//         if (paths.length === 0) return undefined;
+//         return paths.reduce((acc: any, curr: any, i: number) => {
+//             const param = curr.replace(":", "");
+//             this.addParam(acc, param, req.getParameter(i));
+//             return acc;
+//         }, new Map());
+//     },
+//     addParam(map: Map<string, string>, key: string, value: any, i = 0) {
+//         if (!map.has(key)) {
+//             map.set(key, value);
+//         } else {
+//             ++i;
+//             this.addParam(map, key + i, value, i);
+//         }
+//     }
+// }
 export class RenderAPI extends Streamable {
     async render() {
         const { res, req, pathname: pageName } = this.options;
@@ -656,7 +848,7 @@ export class RenderGraphQL extends Streamable {
                     const { graphql, buildSchema } = await import("graphql");
                     const schema = gqlObject.schema;
                     const result = await graphql({
-                        schema: typeof schema === "string" ? buildSchema(schema) : schema,
+                        schema: typeof schema === "string" ? buildSchema(schema) : await getAsyncValue(schema),
                         source: data.query,
                         variableValues: data?.variables,
                         rootValue: gqlObject?.resolvers,
@@ -903,42 +1095,28 @@ export class RenderData extends AbstractRender {
         res.writeHeader("Content-Encoding", "gzip");
 
         const dataModule = await this.getDataModule(pageName);
+        const dataJson = this.getDataJson(pageName);
         const data = dataModule.data;
 
-        if (typeof data === 'function') {
 
-            const dataCall = data();
-            const serialize = new Serializer(dataCall)
-
-            const template = `function getData(){return '${serialize.toJSON()}';}`;
+        const render = () => {
+            const template = `function getData(){return '${dataJson}';}`;
 
             gzip(template, function (_, result) {  // The callback will give you the 
                 res.end(result);                     // result, so just send it.
             });
+        }
+
+        if (typeof data === 'function') {
+            render()
 
         } else {
             //
-            if (cachedData.has(pageName)) {
-                const cachedValue = cachedData.get(pageName);
-                if (!res.aborted) {
-                    const serialize = new Serializer(cachedValue)
-                    const template = `function getData(){return '${serialize.toJSON()}';}`;
-                    gzip(template, function (_, result) {
-                        res.end(result);
-                    });
-                }
-            } else {
-                const dataCall = (await data.runner());
-                const serialize = new Serializer(dataCall)
-                const template = `function getData(){return '${serialize.toJSON()}';}`;
+            render();
 
-                if (!res.aborted) {
-                    gzip(template, function (_, result) {
-                        res.end(result);
-                    });
-                }
-
-                if (data.invalidate) {
+            if (data.invalidate) {
+                if (!cachedData.has(pageName)) {
+                    cachedData.set(pageName, undefined);
                     const token = setInterval(async () => {
                         try {
                             const oldValue = cachedData.get(pageName)
@@ -950,12 +1128,15 @@ export class RenderData extends AbstractRender {
                                     ps.publish(`fetch-${pageName}`, newValue);
                                 }
                             }
+                            const serialize = new Serializer(newValue);
+                            this.setDataJson(pageName, serialize.toJSON())
                         } catch (e) {
                             logger.error(e);
                             clearInterval(token);
                         }
                     }, data.invalidate * 1000);
                 }
+
             }
 
         }
@@ -970,6 +1151,16 @@ export class RenderData extends AbstractRender {
         //requireCaches.add(filePath);
         const result = await import(filePath);
         return result;
+    }
+
+    getDataJson(pageName: string) {
+        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", "data", `${pageName}.data.json`);
+        return readFileSync(filePath, "utf-8");
+    }
+
+    setDataJson(pageName: string, data: string) {
+        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", "data", `${pageName}.data.json`);
+        writeFileSync(filePath, data)
     }
 }
 

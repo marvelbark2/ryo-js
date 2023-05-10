@@ -1,7 +1,6 @@
 import { join } from "path";
-import { build } from "esbuild";
+import { BuildOptions, build } from "esbuild";
 import compress from "@luncheon/esbuild-plugin-gzip";
-import ignorePlugin from "./plugins/ignore-comments";
 
 const fetchParams = (pageName: string) => {
     if (pageName.includes(':')) {
@@ -48,14 +47,14 @@ const getWSDataReload = (data: any, pageName: string) => {
         }`
 }
 const getHydrationScript = async (filePath: string, pageName: string, data: any, parent: any) => `
-    ${process.env.NODE_ENV === "development" ? 'import "preact/debug";' : ""}
-  import {hydrate, h, render} from "preact"
+  import "preact/debug";
+  import {h, render, hydrate} from "preact"
   ${parent ? `import Component, { Parent } from "${filePath}"` :
         `import Component from "${filePath}";
       const Parent = undefined;`}
 
   document.getElementById("${pageName}").innerHTML = "";
-  console.log(Component)
+
   if(window.getData) {
     const data = window.getData();
     const deserializedData = new window.framework.DESERIALIZE(data);
@@ -63,9 +62,9 @@ const getHydrationScript = async (filePath: string, pageName: string, data: any,
     const W = h("span", {id: "${pageName}"}, Element);
     if(Parent) {
         const ParentElement = h(Parent, {}, W);
-        render(ParentElement, document.getElementById("root"))
+        hydrate(ParentElement, document.getElementById("root"))
     } else {
-        render(Element, document.getElementById("${pageName}"))
+        hydrate(Element, document.getElementById("${pageName}"))
     }
     ${getWSDataReload(data, pageName)}
   } else {
@@ -139,7 +138,7 @@ export async function generateClientBundle({
         legalComments: "none",
         write: false,
     }
-}: { filePath: string; outdir?: string; pageName: string; bundleConstants?: any; data: any; parent?: any, tsconfig?: string }) {
+}: { filePath: string; outdir?: string; pageName: string; bundleConstants?: BuildOptions; data: any; parent?: any, tsconfig?: string }) {
     try {
         const result = await build({
             ...bundleConstants,
@@ -148,18 +147,45 @@ export async function generateClientBundle({
                 contents: await getHydrationScript(filePath, pageName, data, parent),
                 resolveDir: process.cwd(),
             },
-            format: "esm",
+            format: "iife",
             platform: 'neutral',
-            //target: ["chrome99", "firefox99", "safari15"],
-
             plugins: [
                 compress({ gzip: true }),
-                //ignorePlugin()
+                {
+                    name: 'avoid-none-used',
+                    setup(build) {
+                        build.onResolve({ filter: /.*/ }, async (args) => {
+                            try {
+                                if (args.pluginData) return // Ignore this if we called ourselves
+
+                                const { path, ...rest } = args
+                                rest.pluginData = true // Avoid infinite recursion
+
+                                const result = await build.resolve(path, rest)
+
+                                result.sideEffects = path === 'preact/debug' || path === 'preact/devtools';
+                                if (result.errors.length > 0) {
+                                    return { path: result.path, external: true }
+                                }
+                                return result
+                            } catch (e) {
+                                console.error(e);
+                                return { external: true };
+                            }
+                        });
+                    }
+                }
             ],
+
+            define: {
+                'process.env.NODE_ENV': `"${process.env.NODE_ENV}"`,
+            },
+
             outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
             keepNames: /**process.env.NODE_ENV === "development" */ true,
             metafile: true,
             tsconfig,
+            publicPath: join(".ssr/output/static")
         });
 
         // if (result.metafile) {
