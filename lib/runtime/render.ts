@@ -696,6 +696,16 @@ export class RenderAPI extends Streamable {
                             res.writeHeader("Set-Cookie", `${key}=${value};${options.map(x => `${x[0]}=${x[1]}`).join(";")}`);
                         }
                     },
+                    getCookies: () => {
+                        const cookies = req.getHeader("cookie");
+                        if (!cookies) return {};
+                        return cookies.split(";").reduce((acc: any, curr: string) => {
+                            const [key, value] = curr.split("=");
+                            acc[key.trim()] = value.trim();
+                            return acc;
+                        }, {});
+                    },
+                    getCookie: (name: string) => (req.getHeader('cookie')).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
                     writeHeader: (key: string, value: string) => {
                         res.writeHeader(key, value);
                     },
@@ -724,8 +734,12 @@ export class RenderAPI extends Streamable {
                     });
                     this.pipeStreamOverResponse(res, stream, data.length);
                 } else {
-                    res.writeHeader("Content-Type", "application/json");
-                    return res.end(JSON.stringify(data));
+                    if (!res.aborted) {
+                        return res.cork(() => {
+                            res.writeHeader("Content-Type", "application/json");
+                            res.end(JSON.stringify(data));
+                        });
+                    }
                 }
             } else {
                 return this.renderError({

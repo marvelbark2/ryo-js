@@ -55,7 +55,7 @@ export default function server(env = "production") {
     const buildReport = _require(join(pwd, ".ssr", "build-report.json"));
     const isStatic = new Map();
 
-
+    const middlewareFn = getMiddleware();
 
 
     const getRenderProps = (res: uws.HttpResponse, req: uws.HttpRequest, path = ""): RenderProps => {
@@ -83,7 +83,8 @@ export default function server(env = "production") {
         return route.length > 1 ? route : "/";
     }
 
-    const middlewareFn = getMiddleware();
+
+
 
     x.forEach((pageServerName) => {
         const filePath = join(pwd, ".ssr", "output", "static", `${pageServerName}.html`)
