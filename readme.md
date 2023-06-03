@@ -428,14 +428,12 @@ export default {
 ```
 
 ### Offline component:
+
+in the example suppose the display the default component if the user is online and the offline component if the user is offline (or if the server is down)
 ```js
 import { useEffect, useState } from "react";
 import { test } from "@lib/db-exec";
 import toast, { Toaster } from 'react-hot-toast';
-
-
-
-
 
 function data() {
     test()
