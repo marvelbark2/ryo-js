@@ -14,7 +14,7 @@ import { Serializer } from "./utils/serializer";
 import logger from "./utils/logger";
 
 import { buildSchema, parse as gqlParser, subscribe } from "graphql";
-import { getAsyncValue } from "./utils/global";
+import { changePageToRoute, getAsyncValue } from "./utils/global";
 
 
 
@@ -53,6 +53,8 @@ export default function server(env = "production") {
 
 
     const buildReport = _require(join(pwd, ".ssr", "build-report.json"));
+    const buildOfflineReport = _require(join(pwd, ".ssr", "build-offline-report.json"));
+
     const isStatic = new Map();
 
     const middlewareFn = getMiddleware();
@@ -75,14 +77,6 @@ export default function server(env = "production") {
             if (!a.includes("/:") && b.includes("/:")) return -1;
             return a.split("/").length - b.split("/").length;
         });
-
-
-
-    const changePageToRoute = (page: string) => {
-        const route = page.replace("/index", "")
-        return route.length > 1 ? route : "/";
-    }
-
 
 
 
@@ -231,6 +225,79 @@ export default function server(env = "production") {
             res.end()
         });
 
+        const pageWithoutSlash = pageServerName.slice(1)
+
+        if (buildOfflineReport.includes(pageWithoutSlash)) {
+            console.log(`Adding to route offline-service-${pageWithoutSlash}`)
+            app.get(`/offline-service-${pageWithoutSlash}`, (res) => {
+                const SCRIPT = `
+                
+                const OFFLINE_VERSION = "${pageWithoutSlash}";
+                const CACHE_NAME = "${pageWithoutSlash}.offline";
+                const OFFLINE_URL = CACHE_NAME + ".html";
+                const OFFLINE_URL_JS = CACHE_NAME + ".js"
+                
+                self.addEventListener("install", (event) => {
+                    event.waitUntil(
+                        (async () => {
+                            const cachePage = await caches.open(CACHE_NAME + ".page");
+                            await cachePage.add(new Request(OFFLINE_URL, { cache: "reload" }));
+
+                            const cacheJs = await caches.open(CACHE_NAME + ".javascript");
+                            await cacheJs.add(new Request(OFFLINE_URL_JS, { cache: "reload" }));
+                        })()
+                    );
+                    self.skipWaiting();
+                });
+                
+                self.addEventListener("activate", (event) => {
+                    event.waitUntil(
+                        (async () => {
+                            if ("navigationPreload" in self.registration) {
+                                await self.registration.navigationPreload.enable();
+                            }
+                        })()
+                    );
+                
+                    self.clients.claim();
+                });
+                
+                self.addEventListener("fetch", (event) => {
+                    if (event.request.mode === "navigate") {
+                        event.respondWith(
+                            (async () => {
+                                console.log(event)
+                                try {
+                                    const preloadResponse = await event.preloadResponse;
+                                    if (preloadResponse) {
+                                        return preloadResponse;
+                                    }
+                
+                                    const networkResponse = await fetch(event.request);
+                                    return networkResponse;
+                                } catch (error) {
+                                    console.log("Fetch failed; returning offline page instead.", error);
+                                    
+                                    const destination = event.request.destination;
+                                    if(destination === "document") {
+                                        const cache = await caches.open(CACHE_NAME + ".page");
+                                        const cachedResponse = await cache.match(OFFLINE_URL);
+                                        return cachedResponse;
+                                    } else {
+                                        const cache = await caches.open(CACHE_NAME + ".javascript");
+                                        const cachedResponse = await cache.match(OFFLINE_URL_JS);
+                                        return cachedResponse;  
+                                    }
+                                }
+                            })()
+                        );
+                    }
+                });
+                `
+                res.writeHeader("Content-Type", "text/javascript");
+                res.end(SCRIPT)
+            });
+        }
 
     })
 

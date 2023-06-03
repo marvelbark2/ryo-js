@@ -12,7 +12,7 @@ function getScript() {
         entryPoints.push(join(__dirname, "ryo-tools.js"));
     }
 
-    build({
+    return build({
         bundle: true,
         entryPoints: entryPoints,
         outfile: out,

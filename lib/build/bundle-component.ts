@@ -82,6 +82,28 @@ const getHydrationScript = async (filePath: string, pageName: string, data: any,
   ${fetchParams(pageName)}
 `;
 
+
+const getHydrationOfflineScript = async (filePath: string, pageName: string, parent: any) => `
+  import "preact/debug";
+  import {h, render, hydrate} from "preact"
+  ${parent ? `import { Parent, offline } from "${filePath}"` :
+        `import {offline} from "${filePath}";
+      const Parent = undefined;`}
+
+  document.getElementById("${pageName}").innerHTML = "";
+
+  if(Parent) {
+    const Element = h(offline)
+    const ParentElement = h(Parent, {id: '${pageName}'}, Element);
+    hydrate(ParentElement, document.getElementById("root"))
+} else {
+        const Element = h(offline);
+        hydrate(Element, document.getElementById("${pageName}"));
+    }
+
+  ${fetchParams(pageName)}
+`;
+
 // function resolveUnresolvablePackages(): Plugin {
 //     const externalPackages = new Set<string>();
 
@@ -199,6 +221,90 @@ export async function generateClientBundle({
 
     } catch (e) {
         console.error({ buildCompo: e });
+        throw e;
+    }
+}
+
+export async function generateOfflineClientBundle({
+    filePath,
+    tsconfig,
+    pageName,
+    data,
+    parent,
+    bundleConstants = {
+        bundle: true,
+        allowOverwrite: true,
+        treeShaking: true,
+        minify: true,
+        loader: { ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx" },
+        jsx: "automatic",
+        jsxFactory: "h",
+        jsxFragment: "Fragment",
+        legalComments: "none",
+        write: false,
+    }
+}: { filePath: string; outdir?: string; pageName: string; bundleConstants?: BuildOptions; data: any; parent?: any, tsconfig?: string }) {
+    try {
+        const result = await build({
+            ...bundleConstants,
+            jsxImportSource: "preact",
+            stdin: {
+                contents: await getHydrationOfflineScript(filePath, pageName, parent),
+                resolveDir: process.cwd(),
+            },
+            format: "iife",
+            platform: 'neutral',
+            plugins: [
+                compress({ gzip: true }),
+                {
+                    name: 'avoid-none-used',
+                    setup(build) {
+                        build.onResolve({ filter: /.*/ }, async (args) => {
+                            try {
+                                if (args.pluginData) return // Ignore this if we called ourselves
+
+                                const { path, ...rest } = args
+                                rest.pluginData = true // Avoid infinite recursion
+
+                                const result = await build.resolve(path, rest)
+
+                                result.sideEffects = path === 'preact/debug' || path === 'preact/devtools';
+                                if (result.errors.length > 0) {
+                                    return { path: result.path, external: true }
+                                }
+                                return result
+                            } catch (e) {
+                                console.error(e);
+                                return { external: true };
+                            }
+                        });
+                    }
+                }
+            ],
+
+            define: {
+                'process.env.NODE_ENV': `"${process.env.NODE_ENV}"`,
+            },
+
+            outfile: join(".ssr/output/static", `${pageName}.offline.js`),
+            keepNames: /**process.env.NODE_ENV === "development" */ true,
+            metafile: true,
+            tsconfig,
+            publicPath: join(".ssr/output/static"),
+            write: false
+        });
+
+        // if (result.metafile) {
+        //     let text = await analyzeMetafile(result.metafile, {
+        //         verbose: true,
+        //     })
+        //     console.log(text)
+        // }
+
+        return result;
+
+    } catch (e) {
+        console.error({ buildOffCompo: e });
         throw e;
     }
 }

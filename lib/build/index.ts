@@ -23,7 +23,7 @@ import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
 import { buildSync } from "esbuild";
 import { importFromStringSync } from "module-from-string";
-import { getProjectPkg } from "../utils/global";
+import { getProjectPkg, isEndsWith } from "../utils/global";
 import RouteValidator from "./validators/RouteValidator";
 import logger from "../utils/logger";
 
@@ -41,9 +41,7 @@ function generateFrameworkJSBundle() {
     generateFramework();
 }
 
-const isEndsWith = (collection: string[], name: string) => {
-    return collection.some((item) => name.endsWith(item));
-}
+
 
 
 const buildComponent = async (Component: any, page: string, pageName: string, outdir: string, outWSdir: string) => {
@@ -102,14 +100,13 @@ async function buildClient() {
 
 
         if (routeValidator.isValide()) {
-
             const getServerTsStatus = (pageName: string) => {
                 if (pageName.endsWith(".gql")) return "graphql";
                 else if (pageName.endsWith(".ev")) return "event";
                 else return "api";
             }
             const allBuilds = modulePages.map(async (page: string) => {
-                if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx"], page)) {
+                if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx", ".gql.tsx", ".gql.jsx"], page)) {
                     throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
                 }
                 const pageName = getPageName(page);
@@ -145,9 +142,7 @@ async function buildClient() {
             });
 
             await Promise.all([...allBuilds, buildMiddleware()]);
-
             generateFrameworkJSBundle();
-
             copyPublicFiles();
 
             return buildReport;

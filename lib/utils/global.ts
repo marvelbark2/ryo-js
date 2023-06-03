@@ -32,3 +32,16 @@ export async function getAsyncValue<T>(value: T | Promise<T>) {
         return value;
     }
 }
+
+export const isEndsWith = (collection: string[], name: string) => {
+    return collection.some((item) => name.endsWith(item));
+}
+
+export const changePageToRoute = (page: string) => {
+    const route = page.replace("/index", "")
+    return route.length > 1 ? route : "/";
+}
+
+const OFFLINES_PAGES = new Set<string>();
+
+export { OFFLINES_PAGES }

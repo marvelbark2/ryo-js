@@ -29,6 +29,8 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
     * Server Component (TODO): export server method without returning anything
         - Here you can use async functional Component and use nodejs api and use JSX synthax but no client side will be run (Hooks, document ... will be ignored)
     * Parent Component: For each component type described before, you can wrap them with a component independent state, you can either add `entry.jsx` as global wrapper or you can add it to the component itself by exporting the component naming it `Parent` (Check the ex `Static async/fresh component` down below). If both used, the parent component declared in the component itself will be used. (If you're using refreshed Static async/fresh component, you should provide the id passed as parent component props in jsx/html element that will be used to revalidate the component after data updated)
+      
+      * Each component could have a offline version but just export offline as component function that will be used when the client is offline
 
 * Api: export function with method name, like: ``` export get() { return ... }  ```
     * JSON api: By returning js objects parsable values
@@ -51,9 +53,14 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
   - [X] Sync static component
   - [X] Server Component
   - [ ] Server Component with hooks
+    
+    - [X] Offline version local
+    - [ ] Offline version global
 - [X] Api
   - [X] JSON api
   - [X] Readable stream api
+   
+    - [ ] generate api types on client side for type safe
 - [ ] GraphQL
   - [X] Query
   - [X] Mutation
@@ -338,6 +345,84 @@ export default {
 
 ```
 
+### Offline component:
+```js
+import { useEffect, useState } from "react";
+import { test } from "@lib/db-exec";
+import toast, { Toaster } from 'react-hot-toast';
+
+
+
+
+
+function data() {
+    test()
+    //test()
+    return {
+        "counter": 3,
+        saveOnData(data: any) {
+            console.log(data)
+        }
+    }
+}
+
+// Offline component
+export function offline() {
+    const [counter, setCounter] = useState(0);
+    return (
+        <div className="bg-gray-50">
+            <Toaster
+                position="top-right"
+                toastOptions={{
+                    duration: 10000,
+                }}
+            />
+
+            <button className="px-4 py-2 bg-blue-900 text-white rounded-2xl" onClick={() => toast.success("Good")} >Toast</button>
+            <button className="mx-3 px-4 py-2 text-blue-900 border-blue-900 border bg-white rounded-2xl"
+                onClick={() => setCounter(c => c + 1)}
+            >
+                counting <b>{counter}</b>
+            </button>
+
+        </div>
+    )
+}
+
+
+export default function index({ data }: { data: { counter: number, saveOnData: (data: any) => void } }) {
+    const [count, setCount] = useState(data.counter);
+    useEffect(() => {
+        console.log("Hello from client side: ", data)
+    }, [data]);
+
+    return (
+        <div className="w-screen h-screen flex items-center justify-center bg-gray-50">
+            <Toaster
+                position="top-right"
+                toastOptions={{
+                    duration: 10000,
+                }}
+            />
+            <div className="flex flex-col w-full p-10 mx-24 border border-dashed border-gray-500 space-y-6 items-center">
+                <p>You clicked <span className="font-bold text-lg text-gray-800">{count}</span> times</p>
+                <button className="bg-blue-50 p-3 border-blue-700 text-blue-700 w-24 rounded-xl" onClick={() => setCount(count + 1)}>Click me</button>
+
+                <span className="hover:cursor-pointer" onClick={() => toast.success('HOL')}>TOAST click</span>
+
+                {/* SPA routing thanks to: Flamethrower */}
+                <a href="/data">Data</a>
+                <a href="/api">TEST</a>
+                <button onClick={() => data.saveOnData({ a: "me" })}>API TEST</button>
+            </div>
+        </div>
+    )
+}
+
+export {
+    data
+}
+```
 ### Middleware:
 You can add middleware by adding a file in root of the project: **middleware.(ts|js)**
 
