@@ -153,6 +153,86 @@ export default {
 ````
 use NODE_ENV=development to access graphql playground in GET request as example: /ttql.gql
 
+##### Subscription:
+```typescript
+
+import { PubSub } from 'graphql-subscriptions'
+
+const TODOS_CHANNEL = "TODOS_CHANNEL";
+
+const pubsub = new PubSub();
+const todos = [
+    {
+        id: "1",
+        text: "Learn GraphQL + Soild",
+        done: false,
+    },
+];
+
+const typeDefs = `
+    type Todo {
+      id: ID!
+      done: Boolean!
+      text: String!
+    }
+    type Query {
+      getTodos: [Todo]!
+    }
+    type Mutation {
+      addTodo(text: String!): Todo
+      setDone(id: ID!, done: Boolean!): Todo
+    }
+    type Subscription {
+      todos: [Todo]!
+    }
+  `;
+
+const resolvers = {
+    getTodos: () => {
+        return todos;
+    },
+
+    addTodo: (
+        { text }: { text: string },
+        { pubsub }: { pubsub: PubSub }
+    ) => {
+        const newTodo = {
+            id: String(todos.length + 1),
+            text,
+            done: false,
+        };
+
+        todos.push(newTodo);
+        pubsub.publish(TODOS_CHANNEL, { todos });
+        return newTodo;
+    },
+    setDone: (
+        { id, done }: { id: string; done: boolean },
+        { pubsub }: { pubsub: PubSub }
+    ) => {
+        const todo = todos.find((todo) => todo.id === id);
+        if (!todo) {
+            throw new Error("Todo not found");
+        }
+        todo.done = done;
+        pubsub.publish(TODOS_CHANNEL, { todos });
+        return todo;
+    },
+
+    todos: (_: unknown, { pubsub }: { pubsub: PubSub }) => {
+        const iterator = pubsub.asyncIterator(TODOS_CHANNEL);
+        pubsub.publish(TODOS_CHANNEL, { todos });
+        return iterator;
+    },
+}
+export default {
+    schema: typeDefs,
+    resolvers: resolvers,
+    context: {
+        pubsub
+    }
+}
+```
 ### Preact components:
 #### Server components:
 
