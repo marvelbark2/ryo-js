@@ -53,18 +53,20 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
   - [X] Sync static component
   - [X] Server Component
   - [ ] Server Component with hooks
-    
+  - [ ] Offline version
     - [X] Offline version local
     - [ ] Offline version global
 - [X] Api
   - [X] JSON api
   - [X] Readable stream api
-   
+
+  - [ ] API tools 
     - [ ] generate api types on client side for type safe
-- [ ] GraphQL
+- [X] GraphQL
   - [X] Query
   - [X] Mutation
-  - [ ]  Subscription
+  - [X] Subscription
+  - [X] Playground on dev mode
 - [X] Websockets
 - [X] Server-Sent-Events
 ## Example:
