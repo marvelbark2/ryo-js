@@ -505,7 +505,7 @@ export {
 ```
 ### Middleware:
 You can add middleware by adding a file in root of the project: **middleware.(ts|js)**
-
+You can also have catch errors by using last argument of the middleware function which could be null
 #### Example:
 
 ```js
@@ -514,7 +514,7 @@ You can add middleware by adding a file in root of the project: **middleware.(ts
 const getCookie = (req, name) => 
 (req.cookies ??= req.getHeader('cookie')).match(getCookie[name] ??= new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2]
 
-export default function middleware(req, res, next) {
+export default function middleware(req, res, next, error) {
     const user = getCookie(req, "user")
     if (user) {
         return next();
