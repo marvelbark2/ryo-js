@@ -5,9 +5,9 @@ import build from './lib/build'
 import register from '@babel/register';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import ps from "./lib/utils/pubsub";
 import generateApiTypes from './lib/generators/generate-api-types';
-import { OFFLINES_PAGES } from './lib/utils/global';
+import { OFFLINES_PAGES, loadConfig } from './lib/utils/global';
+import type { Config } from 'RyoConfig';
 
 // @ts-ignore
 globalThis.register = register;
@@ -19,9 +19,13 @@ register({
 })
 const args = process.argv.slice(2);
 
-const buildingScript = async () => {
+const buildingScript = async (config: Config) => {
     const before = new Date().getTime();
-    const buildReport = await build();
+
+    // Check linter and validate config
+    // check typescript
+
+    const buildReport = await build(config);
 
     if (buildReport) {
         const data = JSON.stringify(buildReport, null, 2);
@@ -40,35 +44,20 @@ const buildingScript = async () => {
     }
 }
 (async () => {
+
     if (args.includes("build")) {
+        const config = await loadConfig();
         try {
-            await buildingScript()
+            await buildingScript(config)
         } catch (e) {
             console.error(e);
         }
     } else if (args.includes("start")) {
-        server()
+        await server()
     } else if (args.includes("dev")) {
-        let uws: any | null = null;
-        try {
-            await buildingScript()
-            uws = server("dev");
-            const unsub = ps.subscribe((msg, at) => {
-                if (msg === "restart" && at) {
-                    uws();
-                    uws = server("dev");
-                    const now = Date.now();
-                    console.log(`Dev compiled at restarted for ${now - at}ms`)
-                    ps.publish("refresh")
-                    unsub()
-                }
-            })
-        } catch (e) {
-            console.error(e);
-            if (uws) {
-                uws();
-            }
-        }
+        const config = await loadConfig();
+        await buildingScript(config)
+        await server("dev");
     } else if (args.includes("generate")) {
         if (args.includes("apis.type")) {
             await generateApiTypes()

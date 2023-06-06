@@ -13,7 +13,8 @@ import { Serializer } from '../utils/serializer';
 import ps from "../utils/pubsub";
 import logger from '../utils/logger';
 import EntryClient from '../entry';
-import { getAsyncValue } from '../utils/global';
+import { getAsyncValue, getMiddleware } from '../utils/global';
+import { parse as queryParser } from "querystring"
 
 
 /** TODOS:
@@ -111,11 +112,13 @@ const renderStatic = {
     }
 }
 
+
 export abstract class AbstractRender {
     static PWD = process.cwd();
     static RequireCaches = new Set<string>();
     static CACHE_API_METHODS = new Map();
     static CACHE_BUNDLES = new Map();
+    static middlewareFn = null
 
     constructor(protected readonly options: RenderProps) {
         /**
@@ -166,6 +169,15 @@ export abstract class AbstractRender {
         AbstractRender.RequireCaches.clear();
     }
 
+    static getMiddlewareFn() {
+        if (AbstractRender.middlewareFn) return AbstractRender.middlewareFn;
+        else {
+            const mFn = getMiddleware()
+            AbstractRender.middlewareFn = mFn;
+            return mFn;
+        }
+    }
+
     getParams() {
         const { req, pathname: pageName } = this.options;
         const paths = pageName.split("/").filter(x => x.startsWith(":"));
@@ -174,7 +186,7 @@ export abstract class AbstractRender {
             const param = curr.replace(":", "");
             this.addParam(acc, param, req.getParameter(i));
             return acc;
-        }, new Map());
+        }, new Map<string, string>());
     }
 
     addParam(map: Map<string, string>, key: string, value: any, i = 0) {
@@ -197,15 +209,24 @@ export abstract class AbstractRender {
     }
 
     render404() {
-        const { res, pathname } = this.options;
-        res.writeStatus("404 Not Found");
-        res.end(`404 Not Found - page: ${pathname}`);
+        this.renderError({ error: 404 });
     }
 
     renderError({ error }: { error: number }) {
-        const { res, pathname } = this.options;
-        res.writeStatus(`${error} Error`);
-        res.end(`${error} Error - page: ${pathname}`);
+        const { res, req, pathname } = this.options;
+        const middlewareFn = AbstractRender.getMiddlewareFn()
+        return middlewareFn(
+            req,
+            res,
+            () => {
+                res.writeStatus(`${error} Error`);
+                res.end(`${error} Error - page: ${pathname}`);
+            },
+            {
+                error,
+                pathname,
+            }
+        )
     }
 }
 
@@ -290,10 +311,6 @@ export class Streamable extends AbstractRender {
     }
 }
 
-
-const isAsyncFn = (fn: any) => {
-    return fn.constructor.name === "AsyncFunction";
-}
 export class RenderServer extends AbstractRender {
 
     async render() {
@@ -678,12 +695,16 @@ export class RenderAPI extends Streamable {
                         })
                     }) : undefined,
                     params: () => {
-                        // TODO: add support for query params
+                        const queries = queryParser(req.getQuery());
                         const params = pageName.includes(":") ? this.getParams() : undefined;
-                        return params ? Object.fromEntries(params) : undefined
+
+                        if (params && queries) {
+                            return { ...queries, ...Object.fromEntries(params) }
+                        }
+                        return params ? Object.fromEntries(params) : queries ? { ...queries } : undefined;
                     },
                     headers: () => {
-                        const headers = new Map();
+                        const headers = new Map<string, string>();
                         req.forEach((key, value) => {
                             headers.set(key, value);
                         });
@@ -699,11 +720,12 @@ export class RenderAPI extends Streamable {
                     getCookies: () => {
                         const cookies = req.getHeader("cookie");
                         if (!cookies) return {};
-                        return cookies.split(";").reduce((acc: any, curr: string) => {
-                            const [key, value] = curr.split("=");
-                            acc[key.trim()] = value.trim();
-                            return acc;
-                        }, {});
+                        return cookies.split(";")
+                            .reduce((acc: any, curr: string) => {
+                                const [key, value] = curr.split("=");
+                                acc[key.trim()] = value.trim();
+                                return acc;
+                            }, {});
                     },
                     getCookie: (name: string) => (req.getHeader('cookie')).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
                     writeHeader: (key: string, value: string) => {

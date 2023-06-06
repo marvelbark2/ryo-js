@@ -1,3 +1,9 @@
 declare module "RyoConfig" {
-    export type Config = {}
+    export type Config = {
+        port?: number;
+        build: {
+            outDir?: string;
+            srcDir?: string;
+        }
+    }
 }

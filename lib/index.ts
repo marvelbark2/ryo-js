@@ -14,7 +14,7 @@ import { Serializer } from "./utils/serializer";
 import logger from "./utils/logger";
 
 import { buildSchema, parse as gqlParser, subscribe } from "graphql";
-import { changePageToRoute, getAsyncValue } from "./utils/global";
+import { changePageToRoute, getAsyncValue, getMiddleware, loadConfig } from "./utils/global";
 
 
 
@@ -25,20 +25,9 @@ const shouldRestart: string[] = [];
 const pwd = process.cwd();
 
 
-function getMiddleware() {
-    const path = ".ssr/output/middleware.js";
-    const middlewarePath = join(pwd, path);
-
-    if (existsSync(middlewarePath)) {
-        const middleware = require(middlewarePath);
-        return middleware.default ? middleware.default : middleware;
-    } else {
-        return (_req: any, _res: any, next: any) => next();
-    }
-}
 
 // TODO: Convert renders to abstracted classes
-export default function server(env = "production") {
+export default async function server(env = "production") {
     babelRegister({
         presets: ["preact", "@babel/preset-env"],
         extensions: [".js", ".jsx", ".ts", ".tsx"],
@@ -51,6 +40,7 @@ export default function server(env = "production") {
 
     const app = uws.App();
 
+    const ryoConfig = await loadConfig()
 
     const buildReport = _require(join(pwd, ".ssr", "build-report.json"));
     const buildOfflineReport = _require(join(pwd, ".ssr", "build-offline-report.json"));
@@ -228,7 +218,6 @@ export default function server(env = "production") {
         const pageWithoutSlash = pageServerName.slice(1)
 
         if (buildOfflineReport.includes(pageWithoutSlash)) {
-            console.log(`Adding to route offline-service-${pageWithoutSlash}`)
             app.get(`/offline-service-${pageWithoutSlash}`, (res) => {
                 const SCRIPT = `
                 
@@ -396,7 +385,7 @@ export default function server(env = "production") {
 
 
 
-    app.listen(3000, (token) => {
+    app.listen(ryoConfig.port || 3000, (token) => {
         if (token) {
             uwsToken = token;
             logger.info("Listening to port 3000");

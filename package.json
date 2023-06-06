@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.32",
+  "version": "0.0.0-meme.33",
   "description": "Ryo-js is a fullstack framework for building universal web applications with preact and graphql.",
   "sideEffects": false,
   "scripts": {
@@ -42,7 +42,7 @@
     "ryo": "./dist/cjs/index.js"
   },
   "peerDependencies": {
-    "preact": "latest",
+    "preact": "^10.15.1",
     "react": "npm:@preact/compat",
     "react-dom": "npm:@preact/compat"
   },
@@ -81,8 +81,10 @@
     "graphql": "16.6.0"
   },
   "files": [
-    "dist/cjs"
+    "dist/cjs",
+    "types"
   ],
+  "types": "types/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/cjs/index.js",

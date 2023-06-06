@@ -23,9 +23,10 @@ import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
 import { buildSync } from "esbuild";
 import { importFromStringSync } from "module-from-string";
-import { getProjectPkg, isEndsWith } from "../utils/global";
+import { getProjectPkg, isEndsWith, loadConfig } from "../utils/global";
 import RouteValidator from "./validators/RouteValidator";
 import logger from "../utils/logger";
+import { Config } from "RyoConfig";
 
 const buildReport: any = {};
 
@@ -77,10 +78,12 @@ const tsxTransformOptions = {
     target: "es2019",
 }
 
-async function buildClient() {
+async function buildClient(config: Config) {
+    reg();
     try {
-        const pages = getPages(join(process.cwd(), "src"), join);
-        const ssrdir = join(".ssr");
+        const srcDir = config.build?.srcDir || "src";
+        const pages = getPages(join(process.cwd(), srcDir), join);
+        const ssrdir = join(config.build?.outDir ?? ".ssr");
         const pkg = await getProjectPkg();
 
         if (existsSync(ssrdir))
@@ -88,7 +91,6 @@ async function buildClient() {
 
         const outdir = join(ssrdir, "output/static");
         const outWSdir = join(ssrdir, "output/server");
-        reg();
 
         const modulePages = pages
             .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx"], page));
@@ -190,9 +192,9 @@ async function buildMiddleware() {
     }
 }
 
-export default async function build() {
+export default async function build(config: Config) {
     try {
-        return await buildClient();
+        return await buildClient(config);
     } catch (e) {
         logger.error(e);
     }

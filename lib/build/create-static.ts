@@ -189,7 +189,7 @@ export async function createStaticFile(
             });
         }
       </script>
-      ` : null}
+      ` : ""}
     </body>
     </html>`;
     writeFileSync(
