@@ -384,11 +384,11 @@ export default async function server(env = "production") {
     }
 
 
-
-    app.listen(ryoConfig.port || 3000, (token) => {
+    const port = ryoConfig.port || process.env.PORT || 3000;
+    app.listen(+port, (token) => {
         if (token) {
             uwsToken = token;
-            logger.info("Listening to port 3000");
+            logger.info("Listening to port " + port);
         } else {
             logger.error("Failed to listen to port 3000");
         }
