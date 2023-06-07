@@ -1,6 +1,7 @@
 import { join } from "path";
 import { BuildOptions, build } from "esbuild";
 import compress from "@luncheon/esbuild-plugin-gzip";
+import { cssModulesPlugin } from "@asn.aeb/esbuild-css-modules-plugin";
 
 const fetchParams = (pageName: string) => {
     if (pageName.includes(':')) {
@@ -153,7 +154,10 @@ export async function generateClientBundle({
         allowOverwrite: true,
         treeShaking: true,
         minify: true,
-        loader: { ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx" },
+        loader: {
+            ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx", '.png': 'dataurl',
+            '.svg': 'text',
+        },
         jsx: "automatic",
         jsxFactory: "h",
         jsxFragment: "Fragment",
@@ -196,7 +200,13 @@ export async function generateClientBundle({
                             }
                         });
                     }
-                }
+                },
+                cssModulesPlugin({
+                    emitCssBundle: {
+                        path: '.ssr/output/static/css',
+                        filename: pageName + ".module",
+                    }
+                })
             ],
 
             define: {
@@ -279,7 +289,13 @@ export async function generateOfflineClientBundle({
                             }
                         });
                     }
-                }
+                },
+                // cssModulesPlugin({
+                //     emitCssBundle: {
+                //         path: 'static/css',
+                //         filename: pageName,
+                //     }
+                // })
             ],
 
             define: {

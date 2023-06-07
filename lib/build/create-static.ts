@@ -99,12 +99,9 @@ export async function createStaticFile(
       }
       await generateData(filePath, pageName, tsconfig);
       await saveDataIntoJson({ data, pageName });
-
     }
 
-    if (options?.bundle) {
-      await generateClientBundle({ filePath, outdir, pageName, tsconfig, data: Component.data, parent: Component.Parent });
-    }
+    const jsBundled = await generateClientBundle({ filePath, outdir, pageName, tsconfig, data: Component.data, parent: Component.Parent });
 
     const Offline = Component.offline
     const isOfflineSupported = typeof Offline !== "undefined";
@@ -165,6 +162,8 @@ export async function createStaticFile(
 
     const Element = h(App, { data: data ?? null }, null);
     const Parent = createElement(Wrapper, { Parent: ParentLayout, Child: Element, id: pageName }, Element);
+    const hasCss = Object.values(jsBundled.metafile.outputs).some((output) => output.cssBundle !== undefined);
+    const hasCssModule = existsSync(join(outdir, "css", pageName + ".module.css"))
 
     const html = `<!DOCTYPE html>
     <html lang="en">
@@ -172,7 +171,11 @@ export async function createStaticFile(
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <link rel="preload" href="/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-      <noscript><link rel="stylesheet" href="/styles.css"></noscript>    
+      <noscript><link rel="stylesheet" href="/styles.css"></noscript>
+      ${hasCss ? `<link rel="preload" href="/${pageName}.bundle.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+      <noscript><link rel="stylesheet" href="/${pageName}.bundle.css"></noscript>` : ''}
+      ${hasCssModule ? `<link rel="preload" href="/css/${pageName}.module.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+      <noscript><link rel="stylesheet" href="/css/${pageName}.module.css"></noscript>` : ''}
       <script src="/framework-system.js" defer></script>
     </head>
     <body>

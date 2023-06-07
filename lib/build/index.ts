@@ -3,7 +3,7 @@ import register from "@babel/register";
 const reg = () => register({
     extensions: [".ts", ".tsx", ".js", ".jsx"],
     presets: ["@babel/preset-env", "preact"],
-
+    ignore: [/\.css$/]
 })
 import { h, Fragment } from "preact";
 
@@ -125,6 +125,10 @@ async function buildClient(config: Config) {
                         external: ["preact", "react", ...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})],
                         write: false,
                         format: "cjs",
+                        loader: {
+                            ".css": "text",
+                        },
+                        outdir: ".ssr",
                     });
                     const code = result.outputFiles[0].text;
 

@@ -52,7 +52,7 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
   - [X] Async static component
   - [X] Sync static component
   - [X] Server Component
-  - [ ] Server Component with hooks
+  - [X] Server Component with hooks
   - [ ] Offline version
     - [X] Offline version local
     - [ ] Offline version global
@@ -237,9 +237,6 @@ export default {
 ```
 ### Preact components:
 #### Server components:
-
-At least for now:
-** You can't use hooks ** 
 ```js
 //Path: src/server.jsx
 
@@ -258,7 +255,7 @@ export function server({ req }) {
 export default function index({ data }) {
     return (
         <div>
-            <h1>Server Side Rendering</h1>
+            <h1>Server Side Rendering <b></b></h1>
 
             <p>From: {data.From}</p>
         </div>

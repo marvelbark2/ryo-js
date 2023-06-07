@@ -59,6 +59,7 @@
     "typescript": "^5.0.3"
   },
   "dependencies": {
+    "@asn.aeb/esbuild-css-modules-plugin": "0.1.9",
     "@babel/core": "^7.21.4",
     "@babel/plugin-transform-react-jsx": "^7.21.0",
     "@babel/preset-env": "^7.21.4",

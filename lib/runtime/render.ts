@@ -212,7 +212,7 @@ export abstract class AbstractRender {
         this.renderError({ error: 404 });
     }
 
-    renderError({ error }: { error: number }) {
+    renderError({ error, err }: { error: number, err?: Error }) {
         const { res, req, pathname } = this.options;
         const middlewareFn = AbstractRender.getMiddlewareFn()
         return middlewareFn(
@@ -223,8 +223,9 @@ export abstract class AbstractRender {
                 res.end(`${error} Error - page: ${pathname}`);
             },
             {
-                error,
+                errorCode: error,
                 pathname,
+                error: err
             }
         )
     }
@@ -494,185 +495,6 @@ export class RenderEvent extends AbstractRender {
 }
 
 
-
-// export const EX = {
-//     render: async function (options: any): Promise<any> {
-//         const { res, req, pathname: pageName } = options;
-//         console.log("Render from EX method")
-//         try {
-//             res.onAborted(() => {
-//                 res.aborted = true;
-//             });
-//             const method = req.getMethod().toLowerCase();
-//             const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
-//             const api = this.getAPIMethod(options, pageName, method, xVersion);
-//             if (api) {
-//                 const dataCall = api({
-//                     url: pageName,
-//                     body: method !== "get" ? async () => await new Promise((resolve, reject) => {
-//                         this.readJson(res, (obj: Buffer | string) => {
-//                             resolve(obj);
-//                         }, () => {
-//                             /* Request was prematurely aborted or invalid or missing, stop reading */
-//                             reject('Invalid JSON or no data at all!');
-//                         })
-//                     }) : undefined,
-//                     params: () => {
-//                         // TODO: add support for query params
-//                         const params = pageName.includes(":") ? this.getParams(options) : undefined;
-//                         return params ? Object.fromEntries(params) : undefined
-//                     },
-//                     headers: () => {
-//                         const headers = new Map();
-//                         req.forEach((key: string, value: string) => {
-//                             headers.set(key, value);
-//                         });
-//                         return headers;
-//                     },
-//                     setCookie: (key: string, value: string, options: string[][] = []) => {
-//                         if (options.length === 0) {
-//                             res.writeHeader("Set-Cookie", `${key}=${value}`);
-//                         } else {
-//                             res.writeHeader("Set-Cookie", `${key}=${value};${options.map(x => `${x[0]}=${x[1]}`).join(";")}`);
-//                         }
-//                     },
-//                     writeHeader: (key: string, value: string) => {
-//                         res.writeHeader(key, value);
-//                     },
-//                     status: (code: number) => {
-//                         res.writeStatus(code.toString());
-//                     }
-
-//                 });
-//                 const data = dataCall.then ? await dataCall : dataCall;
-
-//                 if (data.stream) {
-//                     if (!data.length) {
-
-//                         logger.error("Error reading stream");
-//                         return res.end("Error 500")
-//                     }
-//                     const stream: Readable = data.stream;
-
-//                     stream.on("error", (e) => {
-//                         logger.error(e);
-//                         return res.end("Error 500");
-//                     });
-//                     renderStatic.pipeStreamOverResponse(res, stream, data.length, console.error);
-//                 } else {
-//                     res.writeHeader("Content-Type", "application/json");
-//                     return res.end(JSON.stringify(data));
-//                 }
-//             } else {
-//                 return res.end("Error 401");
-//             }
-
-//         } catch (e) {
-//             logger.error(e);
-//             return res.end('Error 404');
-//         }
-//     },
-
-//     renderDev() {
-//         logger.debug("RenderAPI.renderDev");
-//     },
-
-//     getModuleFromPage(options: any, isDev = false, isGraphql = false) {
-//         const { pathname: pageName, req } = options;
-//         const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
-//         const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${(isGraphql && xVersion) ? pageName.replace(".gql", "") : pageName}${xVersion ? (`@${xVersion}${isGraphql ? ".gql" : ""}`) : ""}.js`);
-//         if (isDev) {
-//             AbstractRender.RequireCaches.add(filePath);
-//         }
-//         return require(filePath);
-//     },
-
-//     getAPIMethod(options: any, pageName: string, methodName: string, version: string): any {
-//         const cacheAPIMethods = AbstractRender.CACHE_API_METHODS;
-//         const isDev = process.env.NODE_ENV !== 'production'
-//         if (isDev) {
-//             const api = this.getModuleFromPage(options, isDev);
-//             const result = api[methodName];
-//             if (!result) return undefined;
-//             return result;
-//         } else {
-//             const key = `${pageName}${version ? `@${version}` : ""}.${methodName}`;
-//             if (cacheAPIMethods.has(key)) {
-//                 return cacheAPIMethods.get(key);
-//             } else {
-//                 const api = this.getModuleFromPage(options, isDev);
-//                 const result = api[methodName];
-//                 if (!result) return undefined;
-//                 cacheAPIMethods.set(key, result);
-//                 return result;
-//             }
-//         }
-//     },
-
-//     readJson(res: uws.HttpResponse, cb: any, err: any) {
-//         let buffer: Buffer | null = null;
-//         let bytes = 0;
-//         /* Register data cb */
-//         res.onData((ab, isLast) => {
-//             const chunk = Buffer.from(ab);
-//             bytes += chunk.length;
-
-//             if (isLast) {
-//                 if (bytes === 0) {
-//                     cb(undefined);
-//                     return;
-//                 }
-//                 let json;
-//                 if (buffer) {
-//                     try {
-//                         json = JSON.parse(Buffer.concat([buffer, chunk]) as any);
-//                     } catch (e) {
-//                         /* res.close calls onAborted */
-//                         cb(Buffer.concat([buffer, chunk]))
-//                         return;
-//                     }
-//                     cb(json);
-//                 } else {
-//                     try {
-//                         json = JSON.parse(chunk as any);
-//                     } catch (e) {
-//                         /* res.close calls onAborted */
-//                         cb(chunk)
-//                         return;
-//                     }
-//                     cb(json);
-//                 }
-//             } else {
-//                 if (buffer) {
-//                     buffer = Buffer.concat([buffer, chunk]);
-//                 } else {
-//                     buffer = Buffer.concat([chunk]);
-//                 }
-//             }
-//         });
-
-//         res.onAborted(err);
-
-//     },
-//     getParams(options: any): any {
-//         const { req, pathname: pageName } = options;
-//         const paths = pageName.split("/").filter((x: string) => x.startsWith(":"));
-//         if (paths.length === 0) return undefined;
-//         return paths.reduce((acc: any, curr: any, i: number) => {
-//             const param = curr.replace(":", "");
-//             this.addParam(acc, param, req.getParameter(i));
-//             return acc;
-//         }, new Map());
-//     },
-//     addParam(map: Map<string, string>, key: string, value: any, i = 0) {
-//         if (!map.has(key)) {
-//             map.set(key, value);
-//         } else {
-//             ++i;
-//             this.addParam(map, key + i, value, i);
-//         }
-//     }
-// }
 export class RenderAPI extends Streamable {
     async render() {
         const { res, req, pathname: pageName } = this.options;
@@ -736,33 +558,39 @@ export class RenderAPI extends Streamable {
                     }
 
                 });
-                const data = dataCall.then ? await dataCall : dataCall;
+                const data = (dataCall?.then) ? await dataCall : dataCall;
+                if (data) {
+                    if (data.stream) {
+                        if (!data.length) {
 
-                if (data.stream) {
-                    if (!data.length) {
+                            logger.error("Error reading stream");
+                            return this.renderError({
+                                error: 500
+                            })
+                        }
+                        const stream: Readable = data.stream;
 
-                        logger.error("Error reading stream");
-                        return this.renderError({
-                            error: 500
-                        })
-                    }
-                    const stream: Readable = data.stream;
-
-                    stream.on("error", (e) => {
-                        logger.error(e);
-                        return this.renderError({
-                            error: 500
-                        })
-                    });
-                    this.pipeStreamOverResponse(res, stream, data.length);
-                } else {
-                    if (!res.aborted) {
-                        return res.cork(() => {
-                            res.writeHeader("Content-Type", "application/json");
-                            res.end(JSON.stringify(data));
+                        stream.on("error", (e) => {
+                            logger.error(e);
+                            return this.renderError({
+                                error: 500
+                            })
                         });
+                        this.pipeStreamOverResponse(res, stream, data.length);
+                    } else {
+                        if (!res.aborted) {
+                            return res.cork(() => {
+                                res.writeHeader("Content-Type", "application/json");
+                                res.end(JSON.stringify(data));
+                            });
+                        }
                     }
+                } else {
+                    return this.renderError({
+                        error: 204
+                    })
                 }
+
             } else {
                 return this.renderError({
                     error: 405,
@@ -771,7 +599,10 @@ export class RenderAPI extends Streamable {
 
         } catch (e) {
             logger.error(e);
-            return this.render404()
+            return this.renderError({
+                error: 500,
+                err: (e as any)
+            })
         }
     }
 

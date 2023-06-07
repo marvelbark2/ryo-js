@@ -15,9 +15,16 @@ globalThis.register = register;
 register({
     "presets": [
         "preact"
+    ],
+    "ignore": [
+        /\.css$/
     ]
 })
 const args = process.argv.slice(2);
+
+require.extensions['.css'] = () => {
+    return;
+};
 
 const buildingScript = async (config: Config) => {
     const before = new Date().getTime();
