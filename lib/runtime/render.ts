@@ -508,7 +508,7 @@ export class RenderAPI extends Streamable {
             if (api) {
                 const dataCall = api({
                     url: pageName,
-                    body: method !== "get" ? async () => await new Promise((resolve, reject) => {
+                    body: method !== "get" ? async () => await new Promise<Buffer | string>((resolve, reject) => {
                         this.readJson(res, (obj: Buffer | string) => {
                             resolve(obj);
                         }, () => {
@@ -559,36 +559,34 @@ export class RenderAPI extends Streamable {
 
                 });
                 const data = (dataCall?.then) ? await dataCall : dataCall;
-                if (data) {
-                    if (data.stream) {
-                        if (!data.length) {
 
-                            logger.error("Error reading stream");
-                            return this.renderError({
-                                error: 500
-                            })
-                        }
-                        const stream: Readable = data.stream;
+                if (typeof data === "undefined") {
+                    return res.end();
+                }
+                if (data.stream) {
+                    if (!data.length) {
 
-                        stream.on("error", (e) => {
-                            logger.error(e);
-                            return this.renderError({
-                                error: 500
-                            })
-                        });
-                        this.pipeStreamOverResponse(res, stream, data.length);
-                    } else {
-                        if (!res.aborted) {
-                            return res.cork(() => {
-                                res.writeHeader("Content-Type", "application/json");
-                                res.end(JSON.stringify(data));
-                            });
-                        }
+                        logger.error("Error reading stream");
+                        return this.renderError({
+                            error: 500
+                        })
                     }
+                    const stream: Readable = data.stream;
+
+                    stream.on("error", (e) => {
+                        logger.error(e);
+                        return this.renderError({
+                            error: 500
+                        })
+                    });
+                    this.pipeStreamOverResponse(res, stream, data.length);
                 } else {
-                    return this.renderError({
-                        error: 204
-                    })
+                    if (!res.aborted) {
+                        return res.cork(() => {
+                            res.writeHeader("Content-Type", "application/json");
+                            res.end(JSON.stringify(data));
+                        });
+                    }
                 }
 
             } else {

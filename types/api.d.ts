@@ -11,6 +11,6 @@ declare module "RyoApi" {
     }
 
     export type ApiPayload = GetApiPayload & {
-        body: (() => Promise<unknown>) | undefined
+        body: (() => Promise<Buffer | string>)
     }
 }
