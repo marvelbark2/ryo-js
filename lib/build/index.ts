@@ -10,7 +10,7 @@ import { h, Fragment } from "preact";
 Object.defineProperty(global, 'h', h);
 Object.defineProperty(global, 'Fragment', Fragment);
 
-import { rmSync, existsSync, createReadStream, createWriteStream, mkdirSync } from "fs";
+import { rmSync, existsSync, createReadStream, createWriteStream, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 
 
@@ -21,7 +21,7 @@ import { generateFramework } from "./create-framework";
 import { createStaticFile } from "./create-static";
 import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
-import { buildSync } from "esbuild";
+import { build as buildSync } from "esbuild";
 import { importFromStringSync } from "module-from-string";
 import { getProjectPkg, isEndsWith, loadConfig } from "../utils/global";
 import RouteValidator from "./validators/RouteValidator";
@@ -35,6 +35,7 @@ const isTsConfigFileExists = existsSync(tsConfigFile);
 
 const tsConfig = isTsConfigFileExists ? tsConfigFile : undefined;
 
+const tsConfigRaw = tsConfig ? readFileSync(tsConfig, "utf-8") : undefined
 
 
 function generateFrameworkJSBundle() {
@@ -74,17 +75,70 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
 }
 const tsxTransformOptions = {
     minify: true,
-    format: "esm",
     target: "es2019",
+    jsxImportSource: "preact",
+    jsx: "automatic",
+    jsxFactory: "h",
+    jsxFragment: "Fragment"
 }
+
+async function buildEntryClientTs({ pkgs }: any) {
+    const tsxPath = join(process.cwd(), "entry.tsx");
+    const jsxPath = join(process.cwd(), "entry.jsx");
+
+    const path = existsSync(tsxPath) ? tsxPath : existsSync(jsxPath) ? jsxPath : undefined;
+    if (path) {
+        console.log("🕧 Building entry.tsx (existsSync(path))");
+        return buildSync({
+            entryPoints: [path],
+            bundle: true,
+            outfile: join(process.cwd(), ".ssr/output/entry.js"),
+            treeShaking: true,
+            tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
+            jsxImportSource: "preact",
+            jsx: "automatic",
+            jsxFactory: "h",
+            jsxFragment: "Fragment",
+            platform: "node",
+            // loader: {
+            //     ".ts": "ts",
+            //     ".tsx": "tsx",
+            //     ".js": "js",
+            //     ".jsx": "jsx",
+            //     '.png': 'dataurl',
+            //     '.svg': 'text',
+            //     '.woff': 'dataurl',
+            //     '.woff2': 'dataurl',
+            //     '.eot': 'dataurl',
+            //     '.ttf': 'dataurl',
+            // },
+            plugins: [
+                {
+                    name: 'empty-css-imports',
+                    setup(build) {
+                        build.onLoad({ filter: /\.css$/ }, () => ({
+                            contents: '',
+                        }))
+                    },
+                }
+            ],
+            allowOverwrite: true,
+            external: ["preact", "react", ...Object.keys(pkgs.dependencies || {}), ...Object.keys(pkgs.peerDependencies || {}), ...Object.keys(pkgs.devDependencies || {})]
+        })
+    }
+
+}
+
+
 
 async function buildClient(config: Config) {
     reg();
     try {
+
+        const pkgs = await getProjectPkg()
         const srcDir = config.build?.srcDir || "src";
         const pages = getPages(join(process.cwd(), srcDir), join);
         const ssrdir = join(config.build?.outDir ?? ".ssr");
-        const pkg = await getProjectPkg();
 
         if (existsSync(ssrdir))
             rmSync(ssrdir, { recursive: true });
@@ -107,6 +161,14 @@ async function buildClient(config: Config) {
                 else if (pageName.endsWith(".ev")) return "event";
                 else return "api";
             }
+
+            if (isTsConfigFileExists) {
+                console.log("🕧 Building entry.tsx (isTsConfigFileExists)");
+
+                await buildEntryClientTs({ pkgs });
+
+            }
+
             const allBuilds = modulePages.map(async (page: string) => {
                 if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx", ".gql.tsx", ".gql.jsx"], page)) {
                     throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
@@ -118,26 +180,53 @@ async function buildClient(config: Config) {
                     console.timeEnd(`🕧 Building: ${pageName}`);
                     return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
                 } else if (page.endsWith(".tsx")) {
-                    const result = buildSync({
+                    const result = await buildSync({
                         entryPoints: [page],
                         bundle: true,
+                        treeShaking: true,
                         tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
-                        external: ["preact", "react", ...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {})],
                         write: false,
-                        format: "cjs",
-                        loader: {
-                            ".css": "text",
-                        },
-                        outdir: ".ssr",
-                    });
+                        jsxImportSource: "preact",
+                        jsx: "automatic",
+                        jsxFactory: "h",
+                        jsxFragment: "Fragment",
+                        platform: "node",
+                        // loader: {
+                        //     ".ts": "ts",
+                        //     ".tsx": "tsx",
+                        //     ".js": "js",
+                        //     ".jsx": "jsx",
+                        //     '.png': 'dataurl',
+                        //     '.svg': 'text',
+                        //     '.woff': 'dataurl',
+                        //     '.woff2': 'dataurl',
+                        //     '.eot': 'dataurl',
+                        //     '.ttf': 'dataurl',
+                        // },
+                        plugins: [
+                            {
+                                name: 'empty-css-imports',
+                                setup(build) {
+                                    build.onLoad({ filter: /\.css$/ }, () => ({
+                                        contents: '',
+                                    }))
+                                },
+                            }
+                        ],
+                        allowOverwrite: true,
+                        external: ["preact", "react", ...Object.keys(pkgs.dependencies || {}), ...Object.keys(pkgs.peerDependencies || {}), ...Object.keys(pkgs.devDependencies || {})]
+                    })
                     const code = result.outputFiles[0].text;
 
                     const Component = importFromStringSync(code, {
-                        // @ts-ignore
                         transformOptions: {
                             ...tsxTransformOptions,
+                            jsx: "automatic",
+                            loader: "tsx",
+                            tsconfigRaw: tsConfigRaw
                         },
-                        filename: page
+                        filename: page,
+                        useCurrentGlobal: true,
                     });
                     return await buildComponent(Component, page, pageName, outdir, outWSdir);
                 } else {
@@ -174,6 +263,15 @@ function copyPublicFiles() {
         const files = getPages(publicDir, join);
         files.forEach((file) => {
             const fileName = file.split(publicDir)[1];
+            if (fileName.includes("/")) {
+                const dirArr = fileName.split("/");
+                dirArr.pop();
+
+                const dir = dirArr.join("/");
+                if (!existsSync(join(outdir, dir))) {
+                    mkdirSync(join(outdir, dir), { recursive: true });
+                }
+            }
             createReadStream(file).pipe(createWriteStream(join(outdir, fileName)));
         })
     }

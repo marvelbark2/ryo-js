@@ -15,6 +15,7 @@ import logger from '../utils/logger';
 import EntryClient from '../entry';
 import { getAsyncValue, getMiddleware } from '../utils/global';
 import { parse as queryParser } from "querystring"
+import { getParts } from 'uWebSockets.js';
 
 
 /** TODOS:
@@ -30,86 +31,13 @@ export interface RenderProps {
     isDev: boolean;
     buildReport: any
     render?: boolean
+    context: Map<string, any>
+    directRender?: boolean
+    params?: any
 }
 
 interface RenderErrorProps extends RenderProps {
     error: number;
-}
-
-const renderStatic = {
-    toArrayBuffer(buffer: Buffer) {
-        return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-    },
-
-    /* Either onAborted or simply finished request */
-    onAbortedOrFinishedResponse(res: uws.HttpResponse, readStream: Readable) {
-
-        if (res.id === -1) {
-            logger.log('error', "onAbortedOrFinishedResponse called twice for the same res!")
-        } else {
-            readStream.destroy();
-        }
-
-        /* Mark this response already accounted for */
-        res.id = -1;
-    },
-
-    /* Helper function to pipe the ReadaleStream over an Http responses */
-    pipeStreamOverResponse(res: uws.HttpResponse, readStream: Readable, totalSize: number, err: (e: any) => void) {
-        /* Careful! If Node.js would emit error before the first res.tryEnd, res will hang and never time out */
-        /* For this demo, I skipped checking for Node.js errors, you are free to PR fixes to this example */
-        readStream.on('data', (chunk) => {
-            /* We only take standard V8 units of data */
-            const ab = this.toArrayBuffer(chunk);
-
-            /* Store where we are, globally, in our response */
-            const lastOffset = res.getWriteOffset();
-
-            /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
-            const [ok, done] = res.tryEnd(ab, totalSize);
-
-            /* Did we successfully send last chunk? */
-            if (done) {
-                this.onAbortedOrFinishedResponse(res, readStream);
-            } else if (!ok) {
-                /* If we could not send this chunk, pause */
-                readStream.pause();
-
-                /* Save unsent chunk for when we can send it */
-                res.ab = ab;
-                res.abOffset = lastOffset;
-
-                /* Register async handlers for drainage */
-                res.onWritable((offset) => {
-                    /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
-
-                    /* On failure the timeout will start */
-                    const [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
-                    if (done) {
-                        this.onAbortedOrFinishedResponse(res, readStream);
-                    } else if (ok) {
-                        /* We sent a chunk and it was not the last one, so let's resume reading.
-                         * Timeout is still disabled, so we can spend any amount of time waiting
-                         * for more chunks to send. */
-                        readStream.resume();
-                    }
-
-                    /* We always have to return true/false in onWritable.
-                     * If you did not send anything, return true for success. */
-                    return ok;
-                });
-            }
-
-        }).on('error', (e) => {
-            /* Todo: handle errors of the stream, probably good to simply close the response */
-            err(e);
-        });
-
-        /* If you plan to asyncronously respond later on, you MUST listen to onAborted BEFORE returning */
-        res.onAborted(() => {
-            this.onAbortedOrFinishedResponse(res, readStream);
-        });
-    }
 }
 
 
@@ -131,30 +59,35 @@ export abstract class AbstractRender {
         }
          */
 
-        if (this.options.render === false) return;
+        const { req, pathname, res, render, directRender } = this.options;
 
-        const { req, pathname } = this.options;
+        //console.log("rendering: ", pathname)
 
-        if (pathname.includes(":")) {
-            const url = req.getUrl();
-            const pathFile = join(AbstractRender.PWD, ".ssr", "output", "static", url);
-            if (existsSync(pathFile)) {
-                const readable = createReadStream(pathFile);
-                renderStatic.pipeStreamOverResponse(
-                    this.options.res,
-                    readable,
-                    readable.bytesRead,
-                    (e) => {
-                        logger.log("error", e);
-                        this.render404();
-                    }
-                )
-            } else {
-                this.render();
-            }
-        } else {
+        if (render === false) return;
+        if (directRender) {
             this.render();
+        } else {
+            if (res.fetched) {
+                logger.warn("Response already fetched, skipping render page: " + pathname)
+                logger.debug("skipping render for: ", { options: this.options })
+            }
+            else {
+                res.fetched = true;
+                if (pathname.includes(":")) {
+                    const url = req.getUrl();
+                    const pathFile = join(AbstractRender.PWD, ".ssr", "output", "static", url);
+                    if (existsSync(pathFile)) {
+                        return new RenderStatic({ ...this.options, directRender: true });
+                    } else {
+                        this.render();
+                    }
+                } else {
+                    this.render();
+                }
+            }
+
         }
+
     }
 
     abstract render(): void;
@@ -179,7 +112,8 @@ export abstract class AbstractRender {
     }
 
     getParams() {
-        const { req, pathname: pageName } = this.options;
+        const { req, pathname: pageName, params } = this.options;
+        if (params) return params;
         const paths = pageName.split("/").filter(x => x.startsWith(":"));
         if (paths.length === 0) return undefined;
         return paths.reduce((acc, curr, i) => {
@@ -201,10 +135,18 @@ export abstract class AbstractRender {
     getModuleFromPage(isDev = false, isGraphql = false) {
         const { pathname: pageName, req } = this.options;
         const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
-        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${(isGraphql && xVersion) ? pageName.replace(".gql", "") : pageName}${xVersion ? (`@${xVersion}${isGraphql ? ".gql" : ""}`) : ""}.js`);
+        const pName = `${(isGraphql && xVersion) ? pageName.replace(".gql", "") : pageName}${xVersion ? (`@${xVersion}${isGraphql ? ".gql" : ""}`) : ""}`;
+        const baseFilePath = join(AbstractRender.PWD, ".ssr", "output", "server")
+        const filePath = join(baseFilePath, `${pName}.js`);
+
         if (isDev) {
             AbstractRender.RequireCaches.add(filePath);
         }
+
+        if (!existsSync(filePath)) {
+            return require(join(baseFilePath, `${pageName}`, `index.js`))
+        }
+
         return require(filePath);
     }
 
@@ -219,8 +161,17 @@ export abstract class AbstractRender {
             req,
             res,
             () => {
-                res.writeStatus(`${error} Error`);
-                res.end(`${error} Error - page: ${pathname}`);
+                const contentType = req.getHeader("accept");
+                if (contentType.includes("text/html")) {
+                    const errRender = new RenderError({ ...this.options, error });
+                    errRender.render(() => {
+                        res.writeStatus(`${error} Error`);
+                        res.end(`${error} Error - page: ${pathname}`);
+                    });
+                } else {
+                    res.writeStatus(`${error} Error`);
+                    res.end(`${error} Error - page: ${pathname}`);
+                }
             },
             {
                 errorCode: error,
@@ -254,50 +205,55 @@ export class Streamable extends AbstractRender {
     }
 
     /* Helper function to pipe the ReadaleStream over an Http responses */
-    pipeStreamOverResponse(res: uws.HttpResponse, readStream: Readable, totalSize: number) {
+    pipeStreamOverResponse(res: uws.HttpResponse, readStream: Readable, totalSize: number, compressed = false) {
+
+
         /* Careful! If Node.js would emit error before the first res.tryEnd, res will hang and never time out */
         /* For this demo, I skipped checking for Node.js errors, you are free to PR fixes to this example */
+
         readStream.on('data', (chunk) => {
             /* We only take standard V8 units of data */
             const ab = this.toArrayBuffer(chunk);
 
             /* Store where we are, globally, in our response */
             const lastOffset = res.getWriteOffset();
+            res.cork(() => {
 
-            /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
-            const [ok, done] = res.tryEnd(ab, totalSize);
+                /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
+                const [ok, done] = res.tryEnd(ab, totalSize);
 
-            /* Did we successfully send last chunk? */
-            if (done) {
-                this.onAbortedOrFinishedResponse(res, readStream);
-            } else if (!ok) {
-                /* If we could not send this chunk, pause */
-                readStream.pause();
+                /* Did we successfully send last chunk? */
+                if (done) {
+                    this.onAbortedOrFinishedResponse(res, readStream);
+                } else if (!ok) {
+                    /* If we could not send this chunk, pause */
+                    readStream.pause();
 
-                /* Save unsent chunk for when we can send it */
-                res.ab = ab;
-                res.abOffset = lastOffset;
+                    /* Save unsent chunk for when we can send it */
+                    res.ab = ab;
+                    res.abOffset = lastOffset;
 
-                /* Register async handlers for drainage */
-                res.onWritable((offset) => {
-                    /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
+                    /* Register async handlers for drainage */
+                    res.onWritable((offset) => {
+                        /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
 
-                    /* On failure the timeout will start */
-                    const [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
-                    if (done) {
-                        this.onAbortedOrFinishedResponse(res, readStream);
-                    } else if (ok) {
-                        /* We sent a chunk and it was not the last one, so let's resume reading.
-                         * Timeout is still disabled, so we can spend any amount of time waiting
-                         * for more chunks to send. */
-                        readStream.resume();
-                    }
+                        /* On failure the timeout will start */
+                        const [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
+                        if (done) {
+                            this.onAbortedOrFinishedResponse(res, readStream);
+                        } else if (ok) {
+                            /* We sent a chunk and it was not the last one, so let's resume reading.
+                             * Timeout is still disabled, so we can spend any amount of time waiting
+                             * for more chunks to send. */
+                            readStream.resume();
+                        }
 
-                    /* We always have to return true/false in onWritable.
-                     * If you did not send anything, return true for success. */
-                    return ok;
-                });
-            }
+                        /* We always have to return true/false in onWritable.
+                         * If you did not send anything, return true for success. */
+                        return ok;
+                    });
+                }
+            })
 
         }).on('error', (e) => {
             /* Todo: handle errors of the stream, probably good to simply close the response */
@@ -309,8 +265,10 @@ export class Streamable extends AbstractRender {
         res.onAborted(() => {
             this.onAbortedOrFinishedResponse(res, readStream);
         });
+
     }
 }
+
 
 export class RenderServer extends AbstractRender {
 
@@ -497,7 +455,7 @@ export class RenderEvent extends AbstractRender {
 
 export class RenderAPI extends Streamable {
     async render() {
-        const { res, req, pathname: pageName } = this.options;
+        const { res, req, pathname: pageName, context, params: p } = this.options;
         try {
             res.onAborted(() => {
                 res.aborted = true;
@@ -508,22 +466,24 @@ export class RenderAPI extends Streamable {
             if (api) {
                 const dataCall = api({
                     url: pageName,
-                    body: method !== "get" ? async () => await new Promise<Buffer | string>((resolve, reject) => {
-                        this.readJson(res, (obj: Buffer | string) => {
-                            resolve(obj);
-                        }, () => {
-                            /* Request was prematurely aborted or invalid or missing, stop reading */
-                            reject('Invalid JSON or no data at all!');
+                    body: method !== "get" ? async () => {
+                        const contentType = req.getHeader("content-type");
+                        return await new Promise<Buffer | string>((resolve, reject) => {
+                            RenderAPI.readJson(contentType, res, (obj: Buffer | string) => {
+                                resolve(obj);
+                            }, () => {
+                                /* Request was prematurely aborted or invalid or missing, stop reading */
+                                reject('Invalid JSON or no data at all!');
+                            })
                         })
-                    }) : undefined,
+                    } : undefined,
                     params: () => {
                         const queries = queryParser(req.getQuery());
                         const params = pageName.includes(":") ? this.getParams() : undefined;
-
                         if (params && queries) {
-                            return { ...queries, ...Object.fromEntries(params) }
+                            return { ...queries, ...(p || Object.fromEntries(params)) }
                         }
-                        return params ? Object.fromEntries(params) : queries ? { ...queries } : undefined;
+                        return (params || p) ? (p || Object.fromEntries(params)) : queries ? { ...queries } : undefined;
                     },
                     headers: () => {
                         const headers = new Map<string, string>();
@@ -555,7 +515,8 @@ export class RenderAPI extends Streamable {
                     },
                     status: (code: number) => {
                         res.writeStatus(code.toString());
-                    }
+                    },
+                    context
 
                 });
                 const data = (dataCall?.then) ? await dataCall : dataCall;
@@ -610,64 +571,42 @@ export class RenderAPI extends Streamable {
 
     getAPIMethod(pageName: string, methodName: string, version: string) {
         const cacheAPIMethods = AbstractRender.CACHE_API_METHODS;
-        if (this.options.isDev) {
+        const key = `${pageName}${version ? `@${version}` : ""}.${methodName}`;
+        if (cacheAPIMethods.has(key)) {
+            return cacheAPIMethods.get(key);
+        } else {
             const api = this.getModuleFromPage(this.options.isDev);
             const result = api[methodName];
             if (!result) return undefined;
+            cacheAPIMethods.set(key, result);
             return result;
-        } else {
-            const key = `${pageName}${version ? `@${version}` : ""}.${methodName}`;
-            if (cacheAPIMethods.has(key)) {
-                return cacheAPIMethods.get(key);
-            } else {
-                const api = this.getModuleFromPage(this.options.isDev);
-                const result = api[methodName];
-                if (!result) return undefined;
-                cacheAPIMethods.set(key, result);
-                return result;
-            }
         }
     }
 
-    readJson(res: uws.HttpResponse, cb: any, err: any) {
-        let buffer: Buffer | null = null;
-        let bytes = 0;
-        /* Register data cb */
+    static readJson(contextType: string, res: uws.HttpResponse, cb: any, err: any) {
+        let buffer: Buffer = Buffer.from('');
         res.onData((ab, isLast) => {
             const chunk = Buffer.from(ab);
-            bytes += chunk.length;
-
+            buffer = Buffer.concat([buffer, chunk]);
             if (isLast) {
-                if (bytes === 0) {
+                if (buffer.length === 0) {
                     cb(undefined);
-                    return;
-                }
-                let json;
-                if (buffer) {
+                } else if (contextType.includes("multipart/form-data")) {
+                    const data = getParts(buffer, contextType);
+                    cb(data);
+                } else if (contextType.includes("application/json")) {
                     try {
-                        json = JSON.parse(Buffer.concat([buffer, chunk]) as any);
+                        const json = JSON.parse(buffer.toString());
+                        cb(json);
                     } catch (e) {
-                        /* res.close calls onAborted */
-                        cb(Buffer.concat([buffer, chunk]))
-                        return;
+                        cb(buffer);
                     }
-                    cb(json);
+                } else if (contextType.includes("application/x-www-form-urlencoded")) {
+                    cb(queryParser(buffer.toString()));
                 } else {
-                    try {
-                        json = JSON.parse(chunk as any);
-                    } catch (e) {
-                        /* res.close calls onAborted */
-                        cb(chunk)
-                        return;
-                    }
-                    cb(json);
+                    cb(buffer);
                 }
-            } else {
-                if (buffer) {
-                    buffer = Buffer.concat([buffer, chunk]);
-                } else {
-                    buffer = Buffer.concat([chunk]);
-                }
+
             }
         });
 
@@ -905,40 +844,66 @@ export class RenderStatic extends Streamable {
         "txt": "text/plain",
     }
     render() {
-        const { res, req, buildReport } = this.options;
-        const path = req.getUrl();
-        const exts = path.split(".");
-        const ext = exts[exts.length - 1];
-        const isDataJs = ext === "js" && exts[exts.length - 2] === "data";
+        const { res, req, buildReport, isDev } = this.options;
+        res.cork(() => {
+            const path = req.getUrl();
+            const exts = path.split(".");
+            const ext = exts[exts.length - 1];
+            const isDataJs = ext === "js" && exts[exts.length - 2] === "data";
 
-        if (isDataJs) {
-            const subPath = exts[0]
-            const pageName = subPath;
-            if (buildReport[pageName]) {
-                return new RenderData({ ...this.options });
-            } else {
-                return this.render404()
+            if (isDataJs) {
+                const subPath = exts[0]
+                const pageName = subPath;
+                if (buildReport[pageName]) {
+                    return new RenderData({ ...this.options });
+                } else {
+                    return this.render404()
+                }
             }
-        }
 
-        if (Object.keys(RenderStatic.MIME_TYPE).includes(ext)) {
-            //@ts-ignore
-            const mime = RenderStatic.MIME_TYPE[ext];
-            if (mime) {
-                res.writeHeader("Content-Type", mime);
-                if (ext === 'js')
-                    res.writeHeader("Content-Encoding", "gzip");
+            if (Object.keys(RenderStatic.MIME_TYPE).includes(ext)) {
+                //@ts-ignore
+                const mime = RenderStatic.MIME_TYPE[ext];
+                if (mime) {
+                    res.writeHeader("Content-Type", mime);
+                    let compressed = false;
+                    if (['js', 'css'].includes(ext)) {
+                        res.writeHeader("Content-Encoding", "gzip");
+                        compressed = true;
+                    }
+                    const filePath = join(AbstractRender.PWD, ".ssr", "output", "static", path);
 
-                const filePath = join(AbstractRender.PWD, ".ssr", "output", "static", `${path}${ext === 'js' ? '.gz' : ''}`);
-                const stream = createReadStream(filePath);
-                const size = stream.bytesRead;
-                return this.pipeStreamOverResponse(res, stream, size);
+
+                    if (compressed) {
+                        if (!isDev)
+                            res.writeHeader("Cache-Control", "public, max-age=31536000, immutable");
+
+                        const text = readFileSync(filePath, 'utf-8');
+
+                        res.cork(() => {
+                            res.onAborted(() => {
+                                res.aborted = true;
+                            })
+                            gzip(text, function (_, result) {
+                                res.end(result);
+                            })
+                            return;
+                        })
+                    } else {
+                        res.cork(() => {
+                            const stream = createReadStream(filePath)
+                            const size = stream.bytesRead;
+                            return this.pipeStreamOverResponse(res, stream, size, compressed);
+                        });
+                    }
+
+                } else {
+                    return this.render404();
+                }
             } else {
                 return this.render404();
             }
-        } else {
-            return this.render404();
-        }
+        })
     }
 
     renderDev() {
@@ -955,37 +920,39 @@ export class RenderData extends AbstractRender {
         res.onAborted(() => {
             res.aborted = true;
         });
+        const dataJson = this.getDataJson(pageName);
+        const template = `function getData(){return ${dataJson};}`;
 
-        res.writeHeader("Content-Type", "application/javascript");
-        res.writeHeader("Content-Encoding", "gzip");
+        const r = await new Promise<Buffer>((resolve, reject) => {
+            gzip(template, function (err, result) {
+                if (err) {
+                    reject(err);
+                } else
+                    resolve(result);
+            })
+        });
+
+        res.cork(() => {
+            res.writeHeader("Content-Type", "application/javascript");
+            res.writeHeader("Content-Encoding", "gzip");
+            res.end(r);
+        })
 
         const dataModule = await this.getDataModule(pageName);
-        const dataJson = this.getDataJson(pageName);
         const data = dataModule.data;
 
-
-        const render = () => {
-            const template = `function getData(){return '${dataJson}';}`;
-
-            gzip(template, function (_, result) {  // The callback will give you the 
-                res.end(result);                     // result, so just send it.
-            });
-        }
-
-        if (typeof data === 'function') {
-            render()
-
-        } else {
-            //
-            render();
-
+        if (typeof data === "object" && data !== null) {
             if (data.invalidate) {
                 if (!cachedData.has(pageName)) {
                     cachedData.set(pageName, undefined);
                     const token = setInterval(async () => {
                         try {
                             const oldValue = cachedData.get(pageName)
-                            const newValue = (await data.runner(() => clearInterval(token), oldValue));
+                            const newValue = (await this.getDataFromRunnerOrLoader(
+                                data,
+                                () => clearInterval(token),
+                                oldValue
+                            ));
                             const shouldUpdate = data.shouldUpdate;
                             if (oldValue !== newValue) {
                                 cachedData.set(pageName, newValue);
@@ -1001,14 +968,50 @@ export class RenderData extends AbstractRender {
                         }
                     }, data.invalidate * 1000);
                 }
-
             }
-
         }
     }
 
     renderDev() {
         this.render();
+    }
+
+    private async getDataFromRunnerOrLoader(
+        data: {
+            runner?: (s: () => void, oldValue: any) => any,
+            source?: {
+                file: string
+                parser?: (data: any) => Promise<any> | any,
+                onChangeData?: (s: () => void, oldValue: any, currentValue: any) => void
+            }
+        },
+        stop: () => void,
+        oldValue: any
+    ) {
+        if (data.runner) {
+            return await data.runner(stop, oldValue);
+        } else if (data.source) {
+            const sourceLoader = data.source;
+            const file = join(process.cwd(), sourceLoader.file)
+            const loader = sourceLoader.parser || ((data: string) => JSON.parse(data))
+
+            const dataFile = readFileSync(file, "utf-8");
+
+            const futureData = loader(dataFile)
+
+            let currentValue = null;
+            if (futureData instanceof Promise || typeof futureData.then === "function") {
+                currentValue = await futureData
+            } else {
+                currentValue = futureData
+            }
+
+            if (sourceLoader.onChangeData) {
+                sourceLoader.onChangeData(stop, oldValue, currentValue);
+            }
+
+            return currentValue;
+        }
     }
 
     async getDataModule(pageName: string) {
@@ -1032,11 +1035,12 @@ export class RenderData extends AbstractRender {
 export class RenderPage extends Streamable {
     render(): void {
         const { pathname: filePath, res } = this.options;
-        res.writeHeader("Content-Type", "text/html; charset=utf-8");
-
-        const stream = createReadStream(filePath);
-        const size = statSync(filePath).size;
-        this.pipeStreamOverResponse(res, stream, size);
+        res.cork(() => {
+            res.writeHeader("Content-Type", "text/html; charset=utf-8");
+            const stream = createReadStream(filePath);
+            const size = statSync(filePath).size;
+            this.pipeStreamOverResponse(res, stream, size);
+        });
     }
 
     renderDev() {
@@ -1044,13 +1048,61 @@ export class RenderPage extends Streamable {
     }
 }
 
+
+const loadErrorPages = (buildReport: any, prefixError: string) => {
+    const res = Object.keys(buildReport).filter((k) => k.includes(prefixError)).map(
+        k => k.replace(prefixError, "")
+    )
+
+    return res;
+}
 export class RenderError {
-    constructor(private readonly options: RenderErrorProps) { }
-    render() {
-        logger.debug("RenderStatic.render");
+
+    constructor(private readonly options: RenderErrorProps) {
+        if (!RenderError.errosPage)
+            RenderError.errosPage = loadErrorPages(options.buildReport, "/_errors/");
+    }
+
+    static errosPage: string[] | undefined = undefined;
+
+
+    render(altResponse: () => any) {
+        if (!RenderError.errosPage)
+            return altResponse();
+        else {
+            const { res } = this.options;
+            const errorPage = this.renderErrorPage({
+                error: this.options.error + "",
+                errosPage: RenderError.errosPage
+            })
+
+            if (!errorPage)
+                return altResponse();
+
+            const filePath = join(AbstractRender.PWD, ".ssr", "output", "static", "_errors", `${errorPage}.html`);
+            const streaming = new Streamable(this.options);
+            res.cork(() => {
+                res.writeHeader("Content-Type", "text/html; charset=utf-8");
+                const stream = createReadStream(filePath);
+                const size = statSync(filePath).size;
+                streaming.pipeStreamOverResponse(res, stream, size);
+            });
+        }
     }
 
     renderDev() {
         logger.debug("RenderStatic.renderDev");
+    }
+
+    renderErrorPage({ error, errosPage }: { error: string, err?: Error, errosPage: string[] }) {
+        const errorPageSorted = errosPage
+            .sort((a, b) => (a.match(/X/g) || []).length - (b.match(/X/g) || []).length)
+
+        const err = errorPageSorted.find((x) => {
+            const regex = new RegExp(x.replace(/X/g, "."), "g");
+            return error.match(regex);
+        })
+
+        return err;
     }
 }

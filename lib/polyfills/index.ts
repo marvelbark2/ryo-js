@@ -3,4 +3,6 @@ import { h, Fragment } from "preact";
 global.h = h;
 /** @ts-ignore */
 global.Fragment = Fragment;
+
+global.process = process;
 export * from './fetch'

@@ -8,6 +8,7 @@ declare module "RyoApi" {
         getCookies: () => { [k: string]: string }
         writeHeader: (key: string, value: string) => void
         status: (code: number) => void
+        context: Map<string, any>
     }
 
     export type ApiPayload = GetApiPayload & {

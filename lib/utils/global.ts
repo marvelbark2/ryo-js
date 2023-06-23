@@ -1,5 +1,4 @@
 import { join } from "path";
-import ps from "./pubsub";
 import { existsSync } from "fs";
 import { Config } from "RyoConfig";
 
@@ -60,15 +59,39 @@ export const loadConfig = async (): Promise<Config> => {
     }
 }
 
-export function getMiddleware() {
-    const path = ".ssr/output/middleware.js";
-    const middlewarePath = join(process.cwd(), path);
+let middlewareInitMode: any = null;
+export function getMiddlewareModule() {
+    if (middlewareInitMode === null) {
+        const path = ".ssr/output/middleware.js";
+        const middlewarePath = join(process.cwd(), path);
 
-    if (existsSync(middlewarePath)) {
-        const middleware = require(middlewarePath);
-        return middleware.default ? middleware.default : middleware;
+        if (existsSync(middlewarePath)) {
+            const middleware = require(middlewarePath);
+            return middleware
+        } else {
+            middlewareInitMode = undefined
+        }
+    }
+
+    return middlewareInitMode;
+
+}
+export function getMiddleware() {
+    const middleware = getMiddlewareModule();
+
+    if (middleware && middleware.default) {
+        return middleware.default;
     } else {
         return (_req: any, _res: any, next: any) => next();
+    }
+}
+
+
+export function getMiddlewareInitMode() {
+    const middleware = getMiddlewareModule();
+
+    if (middleware && middleware.init) {
+        return middleware.init;
     }
 }
 

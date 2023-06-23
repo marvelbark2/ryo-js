@@ -74,6 +74,14 @@ async function saveDataIntoJson({ data, pageName }: { data: any; pageName: strin
 }
 
 
+function getOrNullGlobalEntry() {
+  if (existsSync(join(process.cwd(), "entry.jsx")))
+    return require(join(process.cwd(), "entry.jsx")).default
+  if (existsSync(join(process.cwd(), ".ssr/output/entry.js")))
+    return require(join(process.cwd(), ".ssr/output/entry.js")).default
+
+  return null
+}
 export async function createStaticFile(
   Component: any,
   filePath: string,
@@ -86,7 +94,7 @@ export async function createStaticFile(
 
   try {
     // TODO: Add entry.tsx
-    const Wrapper = existsSync(join(process.cwd(), "entry.jsx")) ? require(join(process.cwd(), "entry.jsx")).default : EntryClient;
+    const Wrapper = getOrNullGlobalEntry() || EntryClient;
     const App = Component.default || Component;
     const ParentLayout = Component.Parent || Wrapper;
     let data = null;
@@ -94,8 +102,29 @@ export async function createStaticFile(
     if (options?.data && Component.data) {
       if (typeof Component.data === "function") {
         data = Component.data();
-      } else if (Object.keys(Component.data).includes('runner')) {
-        data = await Component.data.runner();
+      } else {
+        const keys = Object.keys(Component.data)
+        if (keys.includes('runner')) {
+          data = await Component.data.runner();
+        } else if (keys.includes('source')) {
+          const sourceLoader = Component.data.source as {
+            file: string
+            parser?: (data: any) => Promise<any> | any
+          }
+
+          const file = join(process.cwd(), sourceLoader.file)
+          const loader = sourceLoader.parser || ((data: string) => JSON.parse(data))
+
+          const dataFile = readFileSync(file, "utf-8");
+
+          const futureData = loader(dataFile)
+
+          if (futureData instanceof Promise || typeof futureData.then === "function") {
+            data = await futureData
+          } else {
+            data = futureData
+          }
+        }
       }
       await generateData(filePath, pageName, tsconfig);
       await saveDataIntoJson({ data, pageName });
@@ -105,7 +134,7 @@ export async function createStaticFile(
 
     const Offline = Component.offline
     const isOfflineSupported = typeof Offline !== "undefined";
-    if (isOfflineSupported) {
+    if (isOfflineSupported && Offline) {
       const OfflineComponent = h(Offline, null)
 
       const Parent = createElement(Wrapper, { Parent: ParentLayout, Child: OfflineComponent, id: pageName }, OfflineComponent);

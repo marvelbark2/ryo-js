@@ -99,6 +99,21 @@ const defaultSpecials: Special[] = [
             return new Date(json.source);
         },
     },
+    {
+        $class: 'map',
+        match: function (obj) {
+            return obj instanceof Map;
+        },
+        serialize: function (obj: Map<any, any>) {
+            return {
+                $class: this.$class,
+                source: Object.fromEntries(obj),
+            };
+        },
+        deserialize: function (json) {
+            return new Map(Object.entries(json.source));
+        },
+    },
 ]
 
 export class Specials {
