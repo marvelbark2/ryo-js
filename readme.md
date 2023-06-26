@@ -44,9 +44,97 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
     - Return object match uWebSockets.js documentation
 * Server-Sent-Events: naming the file in src folder with ".ev.js" suffix:
     - Export default: object with invalidate field (ms) and runner function (Async with params route if needed)
+* Subdomains: You can create subdomains by creating a folder with the _subdomains name in src folder and add index.js or index.ts file in it. (Example: _subdomains/api/index.ts) (You can use it to create a subdomain for your api) (You can also create dynamic subdomains by naming the folder with ":" prefix)
+* Errors pages: You can create error pages by creating a folder with the _errors name in src folder and code error with tsx or jsx extension. (Example: _errors/4XX.tsx) (You can handle all the error that error number starts with 4 like 404, 413 ...)
+* Security headers (2 complete): You can handle authentification and authorization by using ryo.config.js.
+  
+   Example with jwt authentification and subdomain for blog project:
+    ```js
+    // file: ryo.config.js
+    /** @type {import('ryo.js').RyoConfig} */
 
+    const bcrypt = require("bcrypt");
+    const jsonwebtoken = require("jsonwebtoken");
 
+    const BASE_HOST = process.env.BASE_HOST || "localhost:3000";
 
+    const jwtAuthFilter = {
+        doFilter(request, _response, setAuthContext, next) {
+            const authHeader = request.getHeader("authorization");
+            if (authHeader.length === 0 || !authHeader.startsWith("Bearer ")) {
+                return next();
+            }
+
+            const jwt = authHeader.substring(7);
+            const decoded = jsonwebtoken.verify(jwt, "secret");
+
+            setAuthContext({
+                id: decoded.username,
+                roles: decoded.roles,
+            })
+
+            return next();
+        }
+    }
+
+    module.exports = {
+        subdomain: {
+            baseHost: BASE_HOST,
+        },
+        security: {
+            cors: false,
+            csrf: true,
+            authorizeHttpRequests: [
+                {
+                    path: ["/", "/*.{js,css}", "/images/*", "/blog", "/_subdomain/test/**/*.{js,css}", "/_subdomain/**/test"],
+                    status: "allow",
+                },
+                {
+                    path: ["/blog/ff", "/_subdomain/test/page"],
+                    status: "auth",
+                },
+                {
+                    path: "/_subdomain/test/",
+                    roles: ["admin"],
+                }
+
+            ],
+            authProvider: {
+                async loadUserByUsername(username) {
+                    return {
+                        username,
+                        plainTextPassword: bcrypt.hashSync("123456", 10),
+                        roles: [username],
+                        onLoginSuccess: (res) => {
+                            const jwt = jsonwebtoken.sign({
+                                username,
+                                roles: [username]
+                            }, "secret");
+
+                            console.log({
+                                jwt, res
+                            });
+                            res.writeHeader("Authorization", `Bearer ${jwt}`);
+
+                            res.end("Done")
+                        }
+                    }
+                },
+                passwordEncoder: {
+                    encode: async (password) => bcrypt.hash(password, 10),
+                    matches: async (password, hash) => bcrypt.compare(password, hash),
+                }
+            },
+            sessionManagement: {
+                sessionCreationPolicy: "stateless",
+            },
+            filter: [
+                jwtAuthFilter
+            ]
+        },
+    }
+
+    ```
 ## Progress Status:
 - [ ] Preact Components
   - [X] Async static component
@@ -69,6 +157,14 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
   - [X] Playground on dev mode
 - [X] Websockets
 - [X] Server-Sent-Events
+- [ ] Subdomains
+  - [X] Static subdomains
+  - [ ] Dynamic subdomains
+  - [X] Api
+  - [ ] GraphQL
+  - [ ] SSE
+  - [ ] Websockets
+- [ ] Security context:
 ## Example:
 
 ### websockets:
