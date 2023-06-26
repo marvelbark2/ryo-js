@@ -26,7 +26,7 @@ import { importFromStringSync } from "module-from-string";
 import { getProjectPkg, isEndsWith, loadConfig } from "../utils/global";
 import RouteValidator from "./validators/RouteValidator";
 import logger from "../utils/logger";
-import { Config } from "RyoConfig";
+import type { RyoConfig as Config } from '../../types/index';
 
 const buildReport: any = {};
 
@@ -46,7 +46,7 @@ function generateFrameworkJSBundle() {
 
 
 
-const buildComponent = async (Component: any, page: string, pageName: string, outdir: string, outWSdir: string) => {
+const buildComponent = async (Component: any, page: string, pageName: string, outdir: string, outWSdir: string, config: Config) => {
     const keys = Object.keys(Component).map((x) => x.toLocaleLowerCase());
     if (isEndsWith([".tsx", ".jsx"], page)) {
         buildReport[`/${pageName}`] = keys.includes("data");
@@ -59,7 +59,7 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
             return await generateSSRPages({ outdir: outWSdir, pageName, path: page, tsConfig });
         }
         console.timeEnd(`🕧 Building: ${pageName}`);
-        return await createStaticFile(Component, page, pageName, tsConfig, { outdir, bundle: true, data: keys.includes("data") });
+        return await createStaticFile(Component, page, pageName, config.security?.csrf === true, tsConfig, { outdir, bundle: true, data: keys.includes("data") });
     } else {
         const [p] = pageName.split("@");
         if (keys.includes("get") || keys.includes("post") || keys.includes("put") || keys.includes("delete")) {
@@ -228,10 +228,10 @@ async function buildClient(config: Config) {
                         filename: page,
                         useCurrentGlobal: true,
                     });
-                    return await buildComponent(Component, page, pageName, outdir, outWSdir);
+                    return await buildComponent(Component, page, pageName, outdir, outWSdir, config);
                 } else {
                     const Component_2 = await import(page);
-                    return await buildComponent(Component_2, page, pageName, outdir, outWSdir);
+                    return await buildComponent(Component_2, page, pageName, outdir, outWSdir, config);
 
                 }
             });

@@ -1,6 +1,7 @@
 import { join } from "path";
 import { existsSync } from "fs";
-import { Config } from "RyoConfig";
+
+import type { RyoConfig } from "RyoConfig"
 
 // export const watchOnDev = {
 //     watch: process.env.NODE_ENV === "development" ? {
@@ -43,7 +44,7 @@ export const changePageToRoute = (page: string) => {
     return route.length > 1 ? route : "/";
 }
 
-export const loadConfig = async (): Promise<Config> => {
+export const loadConfig = async (): Promise<RyoConfig> => {
     const confPath = join(process.cwd(), "ryo.config.js")
     if (existsSync(confPath)) {
         const config = await import(confPath);

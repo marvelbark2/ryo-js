@@ -9,8 +9,14 @@ type RoleOrStatus = ({
 } | {
     roles: string[],
 })
+
+type A = (AuthContextPayload & {
+    plainTextPassword: string;
+    onLoginSuccess?: (res: any, req: any) => void;
+    onLoginFailed?: (res: any, req: any) => void;
+})
 declare module "RyoConfig" {
-    export type Config = {
+    export type RyoConfig = {
         port?: number;
         build?: {
             outDir?: string;
@@ -23,7 +29,13 @@ declare module "RyoConfig" {
 
         security?: {
             csrf?: boolean;
-            cors?: string[] | false;
+            cors?: {
+                origin: string,
+                methods?: string[],
+                allowedHeaders?: string[],
+                exposedHeaders?: string[],
+                maxAge?: number,
+            } | false;
             authorizeHttpRequests?: (RoleOrStatus & {
                 method?: HttpMethod,
                 path: string | string[]
@@ -34,13 +46,15 @@ declare module "RyoConfig" {
             filter?: {
                 doFilter(req: any, res: any, setAuthContext: (authPayload: AuthContextPayload) => void, next: any): void;
             }[],
-            authProvider: {
-                authenticate(username: string): (
-                    (AuthContextPayload & {
-                        plainTextPassword: string;
-                        passwordEncoder: (string: string) => string;
-                    })
-                    | null);
+            authProvider?: {
+                loadUserByUsername(username: string): (
+                    A
+                    | Promise<A>
+                    | null),
+                passwordEncoder?: {
+                    encode(plainTextPassword: string): Promise<string> | string;
+                    matches(plainTextPassword: string, encodedPassword: string): Promise<boolean> | boolean;
+                }
             },
             loginPath?: string;
         }

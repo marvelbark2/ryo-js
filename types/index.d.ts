@@ -1,8 +1,8 @@
-/// <reference path="./api.d.ts" />
 /// <reference path="./config.d.ts" />
+/// <reference path="./api.d.ts" />
 
 export type { GetApiPayload, ApiPayload } from "RyoApi"
-export type { Config as RyoConfig } from "RyoConfig"
+export type { RyoConfig } from "RyoConfig"
 
 
 type RyoDataObjectRunner = {
@@ -16,6 +16,7 @@ type RyoDataObjectLoader = {
     }
 }
 type RyoDataObjectRunnerLoader = RyoDataObjectRunner | RyoDataObjectLoader
+
 export type RyoDataObject = RyoDataObjectRunnerLoader & {
     invalidate?: number,
     shouldUpdate?: (oldValue: any, currentValue: any) => boolean

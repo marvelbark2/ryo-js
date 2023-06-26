@@ -7,7 +7,7 @@ import { join } from 'path';
 import { writeFileSync } from 'fs';
 import generateApiTypes from './lib/generators/generate-api-types';
 import { OFFLINES_PAGES, loadConfig } from './lib/utils/global';
-import type { Config } from 'RyoConfig';
+import type { RyoConfig as Config } from './types/index';
 
 // @ts-ignore
 globalThis.register = register;

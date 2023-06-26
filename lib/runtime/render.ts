@@ -59,27 +59,37 @@ export abstract class AbstractRender {
         }
          */
 
+
+
         const { req, pathname, res, render, directRender } = this.options;
 
-        //console.log("rendering: ", pathname)
+        logger.debug("render options: ", { pathname })
 
-        if (render === false) return;
-        if (directRender) {
+        if (render === false)
+            return;
+        else if (directRender) {
             this.render();
         } else {
             if (res.fetched) {
-                logger.warn("Response already fetched, skipping render page: " + pathname)
-                logger.debug("skipping render for: ", { options: this.options })
+                this.renderDev();
+                logger.warn("Response already fetched, skipping render page: " + pathname);
+                return;
             }
             else {
                 res.fetched = true;
                 if (pathname.includes(":")) {
                     const url = req.getUrl();
-                    const pathFile = join(AbstractRender.PWD, ".ssr", "output", "static", url);
-                    if (existsSync(pathFile)) {
-                        return new RenderStatic({ ...this.options, directRender: true });
-                    } else {
+
+                    if (url === "/") {
                         this.render();
+                        return;
+                    } else {
+                        const pathFile = join(AbstractRender.PWD, ".ssr", "output", "static", url);
+                        if (existsSync(pathFile) && !statSync(pathFile).isDirectory()) {
+                            return new RenderStatic({ ...this.options, directRender: true });
+                        } else {
+                            this.render();
+                        }
                     }
                 } else {
                     this.render();
@@ -361,7 +371,8 @@ export class RenderServer extends AbstractRender {
         }
     }
     renderDev() {
-        this.render();
+        //this.render();
+        logger.debug("RenderServer.renderDev")
     }
 }
 
@@ -463,6 +474,7 @@ export class RenderAPI extends Streamable {
             const method = req.getMethod().toLowerCase();
             const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
             const api = this.getAPIMethod(pageName, method, xVersion);
+
             if (api) {
                 const dataCall = api({
                     url: pageName,
@@ -526,7 +538,6 @@ export class RenderAPI extends Streamable {
                 }
                 if (data.stream) {
                     if (!data.length) {
-
                         logger.error("Error reading stream");
                         return this.renderError({
                             error: 500
@@ -861,7 +872,7 @@ export class RenderStatic extends Streamable {
                 }
             }
 
-            if (Object.keys(RenderStatic.MIME_TYPE).includes(ext)) {
+            else if (Object.keys(RenderStatic.MIME_TYPE).includes(ext)) {
                 //@ts-ignore
                 const mime = RenderStatic.MIME_TYPE[ext];
                 if (mime) {
@@ -907,7 +918,9 @@ export class RenderStatic extends Streamable {
     }
 
     renderDev() {
-        this.render();
+        //this.render();
+        logger.debug("RenderStatic.renderDev")
+
     }
 }
 
@@ -973,7 +986,9 @@ export class RenderData extends AbstractRender {
     }
 
     renderDev() {
-        this.render();
+        // this.render();
+        logger.debug("RenderData.renderDev")
+
     }
 
     private async getDataFromRunnerOrLoader(
@@ -1091,7 +1106,7 @@ export class RenderError {
     }
 
     renderDev() {
-        logger.debug("RenderStatic.renderDev");
+        logger.debug("RenderError.renderDev");
     }
 
     renderErrorPage({ error, errosPage }: { error: string, err?: Error, errosPage: string[] }) {

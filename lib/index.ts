@@ -1,5 +1,5 @@
 import * as uws from "uWebSockets.js";
-import { AbstractRender, EventStreamHandler, RenderAPI, RenderData, RenderEvent, RenderGraphQL, RenderPage, RenderProps, RenderServer, RenderStatic } from "./runtime/render";
+import { AbstractRender, EventStreamHandler, RenderAPI, RenderData, RenderEvent, RenderGraphQL, RenderPage, RenderProps, RenderServer, RenderStatic, RenderError } from "./runtime/render";
 import { join } from "path";
 import { existsSync } from 'fs';
 import ps from "./utils/pubsub";
@@ -18,7 +18,7 @@ import crypto from "crypto";
 import { changePageToRoute, getAsyncValue, getMiddleware, getMiddlewareInitMode, isEndsWith, loadConfig } from "./utils/global";
 
 import { pathToRegexp, match } from "path-to-regexp"
-import { isAuth, sessionPassword } from "./utils/security";
+import { isAuth, sessionPassword, csrf, globToRegex } from "./utils/security";
 
 let uwsToken: uws.us_listen_socket | null;
 const requireCaches = new Set<string>()
@@ -58,20 +58,49 @@ export default async function server(env = "production") {
 
     const isStatic = new Map();
 
-    const subdomainsInfo = new Map<string, (RenderType & { route: string })[]>();
 
-    const isSubdomains = ryoConfig.subdomain && typeof ryoConfig.subdomain?.baseHost === "string";
-
+    const subdomainsContext = {
+        isSubdomains: typeof ryoConfig.subdomain !== "undefined" && typeof ryoConfig.subdomain.baseHost === "string",
+        subdomainsInfo: new Map<string, (RenderType & { route: string })[]>(),
+        dynamicRoutes: [] as (RenderType & { route: string })[],
+        hasDynamicSubdomains: false,
+        urlCache: new Map<string, RenderType & { route: string }>(),
+    }
     const baseHost = ryoConfig.subdomain?.baseHost;
     const isSecureContext = typeof ryoConfig.security !== "undefined";
 
+    process.env.NODE_ENV = env === 'production' ? 'production' : 'development';
 
+
+    const getPathIfSubDomain = (path: string, origin: string) => {
+        if (subdomainsContext.isSubdomains) {
+
+            const baseHost = ryoConfig.subdomain?.baseHost || "";
+            const baseHostWithDot = "." + baseHost;
+
+            const host = origin;
+
+            if (!host || !host.includes(baseHostWithDot)) return path;
+
+            const hostname = host.replace(baseHostWithDot, "");
+
+            if (!hostname) return path;
+            if (!subdomainsContext.hasDynamicSubdomains) {
+                if (!subdomainsContext.subdomainsInfo.has(hostname)) {
+                    return path
+                };
+            }
+
+            return `/_subdomain/${hostname}${path}`;
+        }
+
+        return path;
+    }
     const handleAuth = (req: uws.HttpRequest, res: uws.HttpResponse, next: any) => {
         if (isSecureContext && ryoConfig.security) {
             const loginPath = ryoConfig.security.loginPath || "/login";
             const authorizeHttpRequests = ryoConfig.security.authorizeHttpRequests;
-            const path = req.getUrl() as string;
-            if ((ryoConfig.security?.sessionManagement?.sessionCreationPolicy || "ifRequired") !== "stateless") {
+            if (!res.authContext && (ryoConfig.security?.sessionManagement?.sessionCreationPolicy || "ifRequired") !== "stateless") {
                 const session = (req.getHeader('cookie')).match(new RegExp(`(^|;)\\s*${"SESSION"}\\s*=\\s*([^;]+)`))?.[2]
                 if (session) {
                     const encryptPass = crypto.createHash("sha1")
@@ -84,8 +113,12 @@ export default async function server(env = "production") {
                     }
                 }
             }
+
+            const subPath = req.getUrl();
+            const path = getPathIfSubDomain(subPath, req.getHeader("host"));
+
             if (!authorizeHttpRequests || authorizeHttpRequests.length === 0) {
-                if (path === loginPath) {
+                if (path === loginPath || subPath === loginPath) {
                     return next(req, res);
                 } else {
                     return res.writeStatus("301").writeHeader("Location", loginPath).end();
@@ -94,122 +127,180 @@ export default async function server(env = "production") {
                 res.onAborted(() => {
                     res.aborted = true;
                 })
-                for (let index = 0; index < authorizeHttpRequests.length; index++) {
-                    const authorizeHttpRequest = authorizeHttpRequests[index];
-                    const match = pathToRegexp(authorizeHttpRequest.path).exec(path);
-                    //console.log("match", match, authorizeHttpRequest.path, path);
-                    if (match) {
-                        if ("status" in authorizeHttpRequest) {
-                            const status = authorizeHttpRequest.status;
-                            if (status === "allow") {
-                                return next(req, res);
-                            } else if (status === "deny") {
-                                return res.writeStatus("403 Forbidden").end();
-                            } else if (isAuth(res) && status === "auth") {
-                                return next(req, res);
-                            } else if (!isAuth(res)) {
-                                return res.writeStatus("301").writeHeader("Location", loginPath).end();
 
-                            } else {
-                                return res.writeStatus("403 Forbidden").end();
-                            }
-                        } else if ("roles" in authorizeHttpRequest && isAuth(res)) {
-                            const roles = authorizeHttpRequest.roles;
-                            if (roles.length === 0) {
-                                throw new Error("roles must be an array of string");
-                            } else {
-                                if (isAuth(res) && roles.includes(res.authContext?.role)) {
+                if (path === loginPath || subPath === loginPath) {
+                    next(req, res);
+                } else {
+                    for (let index = 0; index < authorizeHttpRequests.length; index++) {
+                        const authorizeHttpRequest = authorizeHttpRequests[index];
+                        const match = pathToRegexp(
+                            typeof authorizeHttpRequest.path === "string" ?
+                                globToRegex(authorizeHttpRequest.path, { extended: true }) :
+                                authorizeHttpRequest.path.map(p => globToRegex(p, { extended: true }))
+                        ).exec(path);
+
+
+                        if (match) {
+
+                            if ("status" in authorizeHttpRequest) {
+                                const status = authorizeHttpRequest.status;
+                                if (status === "allow") {
                                     return next(req, res);
+                                } else if (status === "deny") {
+                                    return res.writeStatus("403 Forbidden").end();
+                                } else if (isAuth(res) && status === "auth") {
+                                    return next(req, res);
+                                } else if (!isAuth(res)) {
+                                    return res.writeStatus("301").writeHeader("Location", loginPath).end();
                                 } else {
                                     return res.writeStatus("403 Forbidden").end();
                                 }
+                            } else if ("roles" in authorizeHttpRequest && isAuth(res)) {
+                                const roles = authorizeHttpRequest.roles;
+                                if (roles.length === 0) {
+                                    throw new Error("roles must be an array of string");
+                                } else {
+                                    if (roles.some((r: string) => res.authContext.roles.includes(r))) {
+                                        return next(req, res);
+                                    } else {
+                                        return res.writeStatus("403 Forbidden").end();
+                                    }
+                                }
+                            } else {
+                                return res.writeStatus("301").writeHeader("Location", loginPath).end();
                             }
-                        } else {
-                            return res.writeStatus("301").writeHeader("Location", loginPath).end();
                         }
-                    }
-                }
 
-                if ((path === loginPath) || isAuth(res)) {
-                    next(req, res);
-                } else {
+                    }
                     return res.writeStatus("301").writeHeader("Location", loginPath).end();
                 }
+
             }
 
         }
     }
 
     const authFilter = (req: uws.HttpRequest, res: uws.HttpResponse, next: any) => {
-        if (ryoConfig.security && ryoConfig.security?.filter) {
-            const filter = ryoConfig.security.filter;
-            if (filter.length === 0) {
-                return handleAuth(req, res, next);
-            } else {
-                const setAuthContext = (authContext: any) => {
-                    res.authContext = authContext;
-                }
-                const doFilter = (index: number) => {
-                    if (index >= filter.length) {
-                        return handleAuth(req, res, next);
-                    } else {
-                        filter[index]
-                            .doFilter(req, res, setAuthContext, () => doFilter(index + 1))
+        if (ryoConfig.security) {
+            if (ryoConfig.security.csrf !== false) {
+                const reqMethod = req.getMethod().toLocaleUpperCase();
+                if (reqMethod === "POST" || reqMethod === "PUT" || reqMethod === "DELETE") {
+                    const csrfToken = req.getHeader("X-CSRF-TOKEN");
+                    if (!csrfToken || !csrf.verifyToken(csrfToken)) {
+                        return res.writeStatus("403 Forbidden")
+                            .end("CSRF token is invalid or missing in the request");
                     }
                 }
-                doFilter(0);
             }
-        } else {
-            handleAuth(req, res, next);
+
+            const cors = ryoConfig.security.cors;
+
+            if (cors !== undefined && (cors !== false)) {
+                const methods = cors.methods || ["GET", "POST", "PUT", "DELETE", "OPTIONS"];
+                const allowedHeaders = cors.allowedHeaders || ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-TOKEN"];
+                res.writeHeader("Access-Control-Allow-Origin", cors.origin || "localhost");
+                res.writeHeader("Access-Control-Allow-Methods", methods.join(", "));
+                res.writeHeader("Access-Control-Allow-Headers", allowedHeaders.join(", "));
+                res.writeHeader("Access-Control-Allow-Credentials", "true");
+                if (cors.maxAge)
+                    res.writeHeader("Access-Control-Max-Age", cors.maxAge + "");
+                if (cors.exposedHeaders && cors.exposedHeaders.length > 0)
+                    res.writeHeader("Access-Control-Expose-Headers", cors.exposedHeaders.join(", "));
+            }
+
+            if (ryoConfig.security.filter) {
+                const filter = ryoConfig.security.filter;
+                if (filter.length === 0) {
+                    return handleAuth(req, res, next);
+                } else {
+                    const setAuthContext = (authContext: any) => {
+                        res.authContext = authContext;
+                    }
+                    const doFilter = (index: number) => {
+                        if (index >= filter.length) {
+                            return handleAuth(req, res, next);
+                        } else {
+                            filter[index]
+                                .doFilter(req, res, setAuthContext, () => doFilter(index + 1))
+                        }
+                    }
+                    doFilter(0);
+                }
+            } else {
+                handleAuth(req, res, next);
+            }
         }
     }
+
     const handleSubdomains = (req: any, res: any, next: any) => {
-        if (isSubdomains && baseHost) {
+        if (subdomainsContext.isSubdomains && baseHost) {
+            const subdomainsInfo = subdomainsContext.subdomainsInfo;
+            const hasDynamicSubdomains = subdomainsContext.hasDynamicSubdomains;
+            logger.debug("Middleware: handleSubdomains has been called")
+
             const host = req.getHeader("host");
-            if (!host) return true;
+            if (!host || !host.includes("." + baseHost)) return true;
 
-            const hostname = host.split("." + baseHost)[0];
-
-            if (!hostname || !subdomainsInfo.has(hostname)) return true;
-
-            const path = req.getUrl() as string;
+            const hostname = host.replace("." + baseHost, "");
+            if (!hostname || (!subdomainsInfo.has(hostname) && !hasDynamicSubdomains))
+                return true;
 
             const routes = subdomainsInfo.get(hostname);
-            if (!routes) return true;
 
+            if (!routes && !hasDynamicSubdomains) return true;
 
-            const page = routes.find((page) => {
-                const vPath = page.route.replace("/" + hostname, "");
-                const paReg = pathToRegexp(vPath);
-                return paReg.test(path)
-            })
+            const path = ((hasDynamicSubdomains && !routes) ? "/" + hostname : "") + req.getUrl() as string;
+
+            const cacheKey = hostname + "$$" + path;
+            const cacheFull = subdomainsContext.urlCache.has(cacheKey);
+            const page =
+                cacheFull ?
+                    subdomainsContext.urlCache.get(cacheKey) :
+                    (routes || subdomainsContext.dynamicRoutes).find((page) => {
+                        const vPath = page.route.replace("/" + hostname, "");
+                        if (vPath === path) return true;
+                        const paReg = pathToRegexp(vPath);
+                        return paReg.test(path)
+                    })
+
 
             if (page) {
+                if (!cacheFull && !page.route.includes(":")) {
+                    subdomainsContext.urlCache.set(cacheKey, page);
+                }
                 const regexpMatcher = match(page.route);
                 const regParams = regexpMatcher(path);
                 let params: object | undefined = undefined
                 if (regParams) {
                     params = regParams.params
                 }
-
-
-                return next(req, res, () => new page.clazz(getRenderProps(res, req, page.path, params))
+                return next(req, res,
+                    () => new page.clazz(getRenderProps(res, req, page.path, params))
                 )
             } else {
                 if (path.includes(".")) {
                     return next(req, res, () => new RenderStatic(getRenderProps(res, req)))
-
                 } else {
-                    const error = "404";
+                    const error = 404;
                     const pathname = path;
                     const err = new Error("Not Found");
+
                     return next(
                         req,
                         res,
                         () => {
                             res.fetched = true
-                            res.writeStatus(`${error} Error`);
-                            res.end(`${error} Error - page: ${pathname}`);
+                            const contentType = req.getHeader("accept");
+                            if (contentType.includes("text/html")) {
+                                const errRender = new RenderError({ ...getRenderProps(res, req), error });
+                                errRender.render(() => {
+                                    res.writeStatus(`${error} Error`);
+                                    res.end(`${error} Error - page: ${pathname}`);
+                                });
+                            } else {
+                                res.writeStatus(`${error} Error`);
+                                res.end(`${error} Error - page: ${pathname}`);
+                            }
                         },
                         {
                             errorCode: error,
@@ -229,7 +320,7 @@ export default async function server(env = "production") {
 
     const middlewareFn = (req: any, res: any, next: () => any) => {
         res.rewrites = rewrites;
-
+        const isSubdomains = subdomainsContext.isSubdomains;
         if (isSubdomains) {
             if (isSecureContext && ryoConfig.security) {
                 authFilter(
@@ -237,14 +328,16 @@ export default async function server(env = "production") {
                     res,
                     () => {
                         const f = handleSubdomains(req, res, (req: any, res: any, next: () => void) => middleware(req, res, next))
-                        if (f)
+                        if (typeof f === "boolean" && f) {
                             return middleware(req, res, next)
+                        }
                     }
                 )
             } else {
                 const f = handleSubdomains(req, res, (req: any, res: any, next: () => void) => middleware(req, res, next))
-                if (f)
+                if (typeof f === "boolean" && f) {
                     return middleware(req, res, next)
+                }
             }
 
         } else {
@@ -328,18 +421,18 @@ export default async function server(env = "production") {
         .sort((a, b) => {
             if (a === "/index") return -1;
             if (b === "/index") return 1;
-            if (a.includes(":/") && !b.includes("/:")) return 1;
-            if (!a.includes(":/") && b.includes("/:")) return -1;
+            if (a.includes("/:") && !b.includes("/:")) return 1;
+            if (!a.includes("/:") && b.includes("/:")) return -1;
             return a.split("/").length - b.split("/").length;
         });
 
-    if (isSubdomains) {
+    if (subdomainsContext.isSubdomains) {
+        const subdomainsInfo = subdomainsContext.subdomainsInfo;
         subdomains.forEach(({ path, type }) => {
             const pageServerName = path.replace("/_subdomains", "");
 
             const sub = pageServerName.split("/")[1];
             const filePath = join(pwd, ".ssr", "output", "static", `${path}.html`)
-            const page = pageServerName.replace("/index", "/");
             const isPage = existsSync(filePath);
 
             const isServer = type === 'server';
@@ -469,13 +562,36 @@ export default async function server(env = "production") {
             //         return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req, pageServerName)));
             //     })
             // }
-
             if (subdomainsInfo.has(sub)) {
                 (subdomainsInfo.get(sub) ?? []).push(subInfo);
             } else {
                 subdomainsInfo.set(sub, [subInfo]);
             }
         })
+
+        subdomainsInfo.forEach((subInfo, sub) => {
+            subdomainsInfo.set(sub, subInfo.sort(({ route: a }, { route: b }) => {
+                if (a === "/index") return -1;
+                if (b === "/index") return 1;
+                if (a.includes("/:") && !b.includes("/:")) return 1;
+                if (!a.includes("/:") && b.includes("/:")) return -1;
+                return a.split("/").length - b.split("/").length;
+            }));
+
+            if (sub.startsWith(":")) {
+                subInfo.forEach((a) => subdomainsContext.dynamicRoutes.push(a))
+
+                if (!subdomainsContext.hasDynamicSubdomains)
+                    subdomainsContext.hasDynamicSubdomains = true;
+            }
+        });
+
+        subdomainsContext.dynamicRoutes = subdomainsContext.dynamicRoutes.sort(({ route: a }, { route: b }) => {
+            if (a.includes("/index")) return -1;
+            if (b.includes("/index")) return 1;
+            return (a.match(/\/:/g) || []).length - (b.match(/\/:/g) || []).length
+        })
+
     }
     x.forEach((pageServerName) => {
         const filePath = join(pwd, ".ssr", "output", "static", `${pageServerName}.html`)
@@ -727,29 +843,29 @@ export default async function server(env = "production") {
     })
 
     app.get("/*", async (res, req) => {
-        // const ps = x.filter((x) => x.includes(":"))
-        // if (ps.length < 0) {
-        //     const path = req.getUrl();
-        //     const pageName = ps.find((x) => pathToRegexp(x).test(path));
+        const ps = x.filter((x) => x.includes(":"))
+        if (ps.length < 0) {
+            const path = req.getUrl();
+            const pageName = ps.find((x) => pathToRegexp(x).test(path));
 
-        //     if (pageName) {
-        //         const page = paths.get(pageName);
-        //         if (page) {
-        //             const regexpMatcher = match(pageName);
-        //             const regParams = regexpMatcher(path);
-        //             let params: object | undefined = undefined
-        //             if (regParams) {
-        //                 params = regParams.params
-        //             }
-        //             return middlewareFn(req, res, () => new page.clazz(getRenderProps(res, req, page.path, params)));
-        //         }
-        //         return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
-        //     }
-        //     return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
-        // } else {
-        //     return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
-        // }
-        return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
+            if (pageName) {
+                const page = paths.get(pageName);
+                if (page) {
+                    const regexpMatcher = match(pageName);
+                    const regParams = regexpMatcher(path);
+                    let params: object | undefined = undefined
+                    if (regParams) {
+                        params = regParams.params
+                    }
+                    return middlewareFn(req, res, () => new page.clazz(getRenderProps(res, req, page.path, params)));
+                }
+                return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
+            }
+            return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
+        } else {
+            return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
+        }
+        //return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
     })
 
     function loadWSEndpoints() {
@@ -851,6 +967,7 @@ export default async function server(env = "production") {
             logger.info(`Session password: ${sessionPassword.password}`);
         }
         const sessionCreationPolicy = ryoConfig.security?.sessionManagement?.sessionCreationPolicy || "always";
+        const authProvider = ryoConfig.security?.authProvider;
         app.post(`${ryoConfig.security?.loginPath || "/login"}`, async (res, req) => {
             res.onAborted(() => {
                 res.aborted = true;
@@ -860,24 +977,59 @@ export default async function server(env = "production") {
                 RenderAPI.readJson(contentType, res, (o: any) => {
                     resolve(o);
                 }, (e: any) => {
-                    console.log({ e })
+                    logger.error({ e })
                     res.writeStatus("401 Unauthorized").end("Bad credentials");
                 });
             })
 
+
             const { username, password } = o as any;
 
-            if (username === "user" && password === sessionPassword.password) {
-                if (sessionCreationPolicy !== "stateless") {
-                    const token = crypto.createHash("sha1")
-                        .update(sessionPassword.password)
-                        .digest("hex");
-                    res.writeHeader("Set-Cookie", `SESSION=${token}; SameSite=Strict; Path=/; Max-Age=86400`)
-                        .writeStatus("200 OK")
-                        .end("OK");
+            if (authProvider) {
+                const userPayload = await authProvider.loadUserByUsername(username);
+                if (userPayload) {
+                    const match = await authProvider.passwordEncoder?.matches(password, userPayload.plainTextPassword);
+                    if (match) {
+                        const obj = {
+                            id: userPayload.id,
+                            roles: userPayload.roles
+                        }
+                        if (sessionCreationPolicy !== "stateless") {
+                            const token = crypto.createHash("sha1")
+                                .update(JSON.stringify(obj))
+                                .digest("hex");
+                            res.writeHeader("Set-Cookie", `SESSION=${token}; SameSite=Strict; Path=/; Max-Age=86400`)
+                                .writeStatus("200 OK")
+                                .end("OK");
+                        } else {
+                            if (userPayload.onLoginSuccess) {
+                                userPayload.onLoginSuccess(res, req)
+                            } else {
+                                res.writeStatus("200 OK")
+                                    .end(JSON.stringify(obj));
+                            }
+                        }
+                    } else {
+                        if (userPayload.onLoginFailed) {
+                            userPayload.onLoginFailed(res, req)
+                        } else {
+                            res.writeStatus("401 Unauthorized").end("Bad credentials");
+                        }
+                    }
                 }
             } else {
-                res.writeStatus("401 Unauthorized").end("Bad credentials");
+                if (username === "user" && password === sessionPassword.password) {
+                    if (sessionCreationPolicy !== "stateless") {
+                        const token = crypto.createHash("sha1")
+                            .update(sessionPassword.password)
+                            .digest("hex");
+                        res.writeHeader("Set-Cookie", `SESSION=${token}; SameSite=Strict; Path=/; Max-Age=86400`)
+                            .writeStatus("200 OK")
+                            .end("OK");
+                    }
+                } else {
+                    res.writeStatus("401 Unauthorized").end("Bad credentials");
+                }
             }
 
         })

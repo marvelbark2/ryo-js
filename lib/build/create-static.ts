@@ -10,6 +10,7 @@ import EntryClient from "../entry";
 import { Serializer } from "../utils/serializer.js";
 import { minify } from "html-minifier";
 import { generateFramework } from "./create-framework.js";
+import { csrf } from "../utils/security.js";
 
 const projectPkg = getProjectPkg()
 async function generateData(filePath: string, pageName: string, tsconfig?: string) {
@@ -86,6 +87,7 @@ export async function createStaticFile(
   Component: any,
   filePath: string,
   pageName: string,
+  isCsrf: boolean,
   tsconfig?: string,
   options: { bundle: boolean; data: boolean; outdir: string; fileName?: string } | undefined = { bundle: true, data: false, outdir: ".ssr/output/static", fileName: undefined }
 ) {
@@ -194,15 +196,19 @@ export async function createStaticFile(
     const hasCss = Object.values(jsBundled.metafile.outputs).some((output) => output.cssBundle !== undefined);
     const hasCssModule = existsSync(join(outdir, "css", pageName + ".module.css"))
 
+    const csrfToken = isCsrf ? csrf.generateToken() : null
     const html = `<!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      ${isCsrf ? `<meta name="csrf-token" content="${csrfToken}">` : ""}
       <link rel="preload" href="/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
       <noscript><link rel="stylesheet" href="/styles.css"></noscript>
-      ${hasCss ? `<link rel="preload" href="/${pageName}.bundle.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-      <noscript><link rel="stylesheet" href="/${pageName}.bundle.css"></noscript>` : ''}
+      ${hasCss ?
+        `<link rel="preload" href="/${pageName}.bundle.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+      <noscript><link rel="stylesheet" href="/${pageName}.bundle.css"></noscript>`
+        : ''}
       ${hasCssModule ? `<link rel="preload" href="/css/${pageName}.module.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
       <noscript><link rel="stylesheet" href="/css/${pageName}.module.css"></noscript>` : ''}
       <script src="/framework-system.js" defer></script>
