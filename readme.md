@@ -26,6 +26,7 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
         - runner: Function async accepts stop method as argument (stop: called to stop caching) returns a value
         - invalidate(Optional): Field, duration per second to cache value, it's a global value.
         - shouldUpdate(Optional): Function accepts two values (Old, new) to re-render component on runtime when data changed after the cache invalidated
+        - You can also use file as datasource by specifying the file path in data field also specify parsing way
     * Server Component (TODO): export server method without returning anything
         - Here you can use async functional Component and use nodejs api and use JSX synthax but no client side will be run (Hooks, document ... will be ignored)
     * Parent Component: For each component type described before, you can wrap them with a component independent state, you can either add `entry.jsx` as global wrapper or you can add it to the component itself by exporting the component naming it `Parent` (Check the ex `Static async/fresh component` down below). If both used, the parent component declared in the component itself will be used. (If you're using refreshed Static async/fresh component, you should provide the id passed as parent component props in jsx/html element that will be used to revalidate the component after data updated)
@@ -396,7 +397,7 @@ export default function index({ data }) {
 ```
 
 #### Static async/fresh component:
-
+#### Runner Fn:
 ```js
 // Path: src/counter.jsx
 // route: /counter
@@ -481,7 +482,26 @@ export default function index({ data }) {
     )
 }
 ```
+#### Source file:
+```js
+import Articles from "@/components/Articles";
+import type { Article } from "@/types";
+import type { RyoDataObject } from "ryo.js";
 
+export const data: RyoDataObject = {
+    source: {
+        // root path is CWD
+        file: "data/articles.json",
+    },
+    invalidate: 20,
+    shouldUpdate: () => true
+}
+export default function App({ data }: { data: Article[] }) {
+    return (
+        <Articles articles={data} />
+    )
+}
+```
 ### Dynamic route (component):
 
 ```js
