@@ -171,16 +171,25 @@ export abstract class AbstractRender {
             req,
             res,
             () => {
-                const contentType = req.getHeader("accept");
-                if (contentType.includes("text/html")) {
-                    const errRender = new RenderError({ ...this.options, error });
-                    errRender.render(() => {
+                try {
+                    const contentType = req.getHeader("accept");
+                    if (contentType.includes("text/html")) {
+                        const errRender = new RenderError({ ...this.options, error });
+                        errRender.render(() => {
+                            res.writeStatus(`${error} Error`);
+                            res.end(`${error} Error - page: ${pathname}`);
+                        });
+                    } else {
                         res.writeStatus(`${error} Error`);
                         res.end(`${error} Error - page: ${pathname}`);
-                    });
-                } else {
-                    res.writeStatus(`${error} Error`);
-                    res.end(`${error} Error - page: ${pathname}`);
+                    }
+                } catch (error) {
+                    try {
+                        res.writeStatus(`${error} Error`);
+                        res.end(`${error} Error - page: ${pathname}`);
+                    } catch (e) {
+                        logger.error("Error in error handler", error, e);
+                    }
                 }
             },
             {
@@ -290,7 +299,7 @@ export class RenderServer extends AbstractRender {
 
         const pwd = AbstractRender.PWD;
         try {
-            const componentPath = join(pwd, ".ssr", "output", "server", "pages", `${path}.js`);
+            const componentPath = join(pwd, ".ssr", "output", "server", "pages", `${path.replace("_subdomains/_subdomains", "_subdomains")}.js`);
             const splittedPath = path.split("/");
             splittedPath.pop();
             const component = require(componentPath);
@@ -307,7 +316,8 @@ export class RenderServer extends AbstractRender {
             });
 
             const dataFn = component.server({
-                req: reqObj
+                req: reqObj,
+                params: this.getParams()
             });
 
             const Wrapper = existsSync(join(process.cwd(), "entry.jsx")) ? require(join(process.cwd(), "entry.jsx")).default : EntryClient;
@@ -552,6 +562,24 @@ export class RenderAPI extends Streamable {
                         })
                     });
                     this.pipeStreamOverResponse(res, stream, data.length);
+                } else if (data.subscribe) {
+                    res.cork(() => {
+                        res.writeHeader("Content-Type", "application/json");
+                        const dispose = data.subscribe((x: any) => {
+                            logger.debug("Streamed data", x);
+                            res.write(JSON.stringify(x));
+
+                        });
+
+                        const t = setInterval(() => {
+                            if (dispose.closed) {
+                                dispose.unsubscribe();
+                                res.end();
+                                clearInterval(t);
+                            }
+                        }, 500)
+                    })
+
                 } else {
                     if (!res.aborted) {
                         return res.cork(() => {
@@ -560,6 +588,7 @@ export class RenderAPI extends Streamable {
                         });
                     }
                 }
+                return;
 
             } else {
                 return this.renderError({
@@ -866,7 +895,7 @@ export class RenderStatic extends Streamable {
                 const subPath = exts[0]
                 const pageName = subPath;
                 if (buildReport[pageName]) {
-                    return new RenderData({ ...this.options });
+                    return new RenderData({ ...this.options, directRender: true });
                 } else {
                     return this.render404()
                 }
@@ -1030,7 +1059,7 @@ export class RenderData extends AbstractRender {
     }
 
     async getDataModule(pageName: string) {
-        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", "data", `${pageName}.data.js`);
+        const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", "data", this.options.directRender ? pageName : `${pageName}.data.js`);
         //requireCaches.add(filePath);
         const result = await import(filePath);
         return result;

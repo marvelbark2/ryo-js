@@ -618,7 +618,7 @@ export {
 ```
 ### Middleware:
 You can add middleware by adding a file in root of the project: **middleware.(ts|js)**
-You can also have catch errors by using last argument of the middleware function which could be null
+You can also have catch errors by using last argument of the middleware function which could be null. You can also add structure to init stuff like database connection or other stuff. by exporting init function 
 #### Example:
 
 ```js
@@ -635,6 +635,13 @@ export default function middleware(req, res, next, error) {
         res.writeHeader("Set-Cookie", "user=Guest")
         return res.writeStatus("401").end("You are not authorized")
     }
+}
+
+//Optional
+export function init({ context }: { context: Map<string, any> }) {
+    
+    const db = ... // Inmemory database or other stuff
+    context.set("articleDb", db); // The context, a global context, can be used in the data section or apis
 }
 
 ```

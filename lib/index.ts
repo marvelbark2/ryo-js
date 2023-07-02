@@ -181,6 +181,7 @@ export default async function server(env = "production") {
     }
 
     const authFilter = (req: uws.HttpRequest, res: uws.HttpResponse, next: any) => {
+        console.time("authFilter");
         if (ryoConfig.security) {
             if (ryoConfig.security.csrf !== false) {
                 const reqMethod = req.getMethod().toLocaleUpperCase();
@@ -230,6 +231,7 @@ export default async function server(env = "production") {
                 handleAuth(req, res, next);
             }
         }
+        console.timeEnd("authFilter");
     }
 
     const handleSubdomains = (req: any, res: any, next: any) => {
@@ -323,7 +325,7 @@ export default async function server(env = "production") {
         const isSubdomains = subdomainsContext.isSubdomains;
         if (isSubdomains) {
             if (isSecureContext && ryoConfig.security) {
-                authFilter(
+                return authFilter(
                     req,
                     res,
                     () => {
@@ -338,11 +340,12 @@ export default async function server(env = "production") {
                 if (typeof f === "boolean" && f) {
                     return middleware(req, res, next)
                 }
+                return f;
             }
 
         } else {
             if (isSecureContext && ryoConfig.security) {
-                authFilter(req, res, next);
+                return authFilter(req, res, next);
             } else {
                 return middleware(req, res, next)
             }
@@ -593,6 +596,8 @@ export default async function server(env = "production") {
         })
 
     }
+
+
     x.forEach((pageServerName) => {
         const filePath = join(pwd, ".ssr", "output", "static", `${pageServerName}.html`)
         const page = pageServerName.replace("/index", "/");
@@ -703,11 +708,11 @@ export default async function server(env = "production") {
                 clazz: RenderAPI,
                 path: pageServerName,
             });
-            app.any(pageName, (res, req) => {
-                return middlewareFn(
+            app.any(pageName, (res, req) =>
+                middlewareFn(
                     req, res, () => new RenderAPI(getRenderProps(res, req, pageServerName))
                 )
-            })
+            )
         } else if (isPage) {
             if (!pageName.includes("/_errors/")) {
                 paths.set(pageName, {

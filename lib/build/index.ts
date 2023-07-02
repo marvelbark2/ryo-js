@@ -3,14 +3,13 @@ import register from "@babel/register";
 const reg = () => register({
     extensions: [".ts", ".tsx", ".js", ".jsx"],
     presets: ["@babel/preset-env", "preact"],
-    ignore: [/\.css$/]
 })
 import { h, Fragment } from "preact";
 
 Object.defineProperty(global, 'h', h);
 Object.defineProperty(global, 'Fragment', Fragment);
 
-import { rmSync, existsSync, createReadStream, createWriteStream, mkdirSync, readFileSync } from "fs";
+import { rmSync, existsSync, createReadStream, createWriteStream, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 
@@ -27,6 +26,7 @@ import { getProjectPkg, isEndsWith, loadConfig } from "../utils/global";
 import RouteValidator from "./validators/RouteValidator";
 import logger from "../utils/logger";
 import type { RyoConfig as Config } from '../../types/index';
+import ignoreUnused from "./plugins/ignore-unused";
 
 const buildReport: any = {};
 
@@ -35,16 +35,13 @@ const isTsConfigFileExists = existsSync(tsConfigFile);
 
 const tsConfig = isTsConfigFileExists ? tsConfigFile : undefined;
 
-const tsConfigRaw = tsConfig ? readFileSync(tsConfig, "utf-8") : undefined
+//const tsConfigRaw = tsConfig ? readFileSync(tsConfig, "utf-8") : undefined
 
 
 function generateFrameworkJSBundle() {
     console.log("🕧 Building framework bundle");
     generateFramework();
 }
-
-
-
 
 const buildComponent = async (Component: any, page: string, pageName: string, outdir: string, outWSdir: string, config: Config) => {
     const keys = Object.keys(Component).map((x) => x.toLocaleLowerCase());
@@ -73,14 +70,14 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
         return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
     }
 }
-const tsxTransformOptions = {
-    minify: true,
-    target: "es2019",
-    jsxImportSource: "preact",
-    jsx: "automatic",
-    jsxFactory: "h",
-    jsxFragment: "Fragment"
-}
+// const tsxTransformOptions = {
+//     minify: true,
+//     target: "es2019",
+//     jsxImportSource: "preact",
+//     jsx: "automatic",
+//     jsxFactory: "h",
+//     jsxFragment: "Fragment"
+// }
 
 async function buildEntryClientTs({ pkgs }: any) {
     const tsxPath = join(process.cwd(), "entry.tsx");
@@ -180,29 +177,18 @@ async function buildClient(config: Config) {
                     console.timeEnd(`🕧 Building: ${pageName}`);
                     return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
                 } else if (page.endsWith(".tsx")) {
-                    const result = await buildSync({
+                    const modulePath = join(ssrdir, "tsxpage", `${pageName}.js`);
+                    await buildSync({
                         entryPoints: [page],
                         bundle: true,
                         treeShaking: true,
                         tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
-                        write: false,
                         jsxImportSource: "preact",
                         jsx: "automatic",
                         jsxFactory: "h",
                         jsxFragment: "Fragment",
-                        platform: "node",
-                        // loader: {
-                        //     ".ts": "ts",
-                        //     ".tsx": "tsx",
-                        //     ".js": "js",
-                        //     ".jsx": "jsx",
-                        //     '.png': 'dataurl',
-                        //     '.svg': 'text',
-                        //     '.woff': 'dataurl',
-                        //     '.woff2': 'dataurl',
-                        //     '.eot': 'dataurl',
-                        //     '.ttf': 'dataurl',
-                        // },
+                        platform: "neutral",
+                        format: "cjs",
                         plugins: [
                             {
                                 name: 'empty-css-imports',
@@ -211,24 +197,25 @@ async function buildClient(config: Config) {
                                         contents: '',
                                     }))
                                 },
-                            }
+                            },
+                            ignoreUnused()
                         ],
-                        allowOverwrite: true,
+                        outfile: modulePath,
+                        write: true,
                         external: ["preact", "react", ...Object.keys(pkgs.dependencies || {}), ...Object.keys(pkgs.peerDependencies || {}), ...Object.keys(pkgs.devDependencies || {})]
                     })
-                    const code = result.outputFiles[0].text;
 
-                    const Component = importFromStringSync(code, {
-                        transformOptions: {
-                            ...tsxTransformOptions,
-                            jsx: "automatic",
-                            loader: "tsx",
-                            tsconfigRaw: tsConfigRaw
-                        },
-                        filename: page,
-                        useCurrentGlobal: true,
-                    });
-                    return await buildComponent(Component, page, pageName, outdir, outWSdir, config);
+                    try {
+                        const Component = require(join(process.cwd(), modulePath));
+                        return await buildComponent(Component, page, pageName, outdir, outWSdir, config);
+
+                    } catch (error) {
+                        console.error({
+                            error,
+                            page,
+                            modulePath
+                        });
+                    }
                 } else {
                     const Component_2 = await import(page);
                     return await buildComponent(Component_2, page, pageName, outdir, outWSdir, config);

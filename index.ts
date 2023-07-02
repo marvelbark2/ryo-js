@@ -9,22 +9,19 @@ import generateApiTypes from './lib/generators/generate-api-types';
 import { OFFLINES_PAGES, loadConfig } from './lib/utils/global';
 import type { RyoConfig as Config } from './types/index';
 
+require.extensions['.css'] = () => {
+    return;
+};
+
 // @ts-ignore
 globalThis.register = register;
-
 register({
     "presets": [
-        "preact"
-    ],
-    "ignore": [
-        /\.css$/
+        "preact",
     ]
 })
 const args = process.argv.slice(2);
 
-require.extensions['.css'] = () => {
-    return;
-};
 
 const buildingScript = async (config: Config) => {
     const before = new Date().getTime();

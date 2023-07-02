@@ -181,10 +181,10 @@ export async function generateClientBundle({
         });
 
         if (result.metafile) {
-            let text = await analyzeMetafile(result.metafile, {
-                verbose: true,
-            })
-            console.log(text)
+            let text = await analyzeMetafile(result.metafile)
+            if (text.length < 1500) {
+                console.log(text)
+            }
         }
 
         return result;
