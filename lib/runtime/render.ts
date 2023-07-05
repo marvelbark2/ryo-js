@@ -486,84 +486,84 @@ export class RenderAPI extends Streamable {
             const api = this.getAPIMethod(pageName, method, xVersion);
 
             if (api) {
-                const dataCall = api({
-                    url: pageName,
-                    body: method !== "get" ? async () => {
-                        const contentType = req.getHeader("content-type");
-                        return await new Promise<Buffer | string>((resolve, reject) => {
-                            RenderAPI.readJson(contentType, res, (obj: Buffer | string) => {
-                                resolve(obj);
-                            }, () => {
-                                /* Request was prematurely aborted or invalid or missing, stop reading */
-                                reject('Invalid JSON or no data at all!');
+                return res.cork(async () => {
+                    const dataCall = api({
+                        url: pageName,
+                        body: method !== "get" ? async () => {
+                            const contentType = req.getHeader("content-type");
+                            return await new Promise<Buffer | string>((resolve, reject) => {
+                                RenderAPI.readJson(contentType, res, (obj: Buffer | string) => {
+                                    resolve(obj);
+                                }, () => {
+                                    /* Request was prematurely aborted or invalid or missing, stop reading */
+                                    reject('Invalid JSON or no data at all!');
+                                })
                             })
-                        })
-                    } : undefined,
-                    params: () => {
-                        const queries = queryParser(req.getQuery());
-                        const params = pageName.includes(":") ? this.getParams() : undefined;
-                        if (params && queries) {
-                            return { ...queries, ...(p || Object.fromEntries(params)) }
-                        }
-                        return (params || p) ? (p || Object.fromEntries(params)) : queries ? { ...queries } : undefined;
-                    },
-                    headers: () => {
-                        const headers = new Map<string, string>();
-                        req.forEach((key, value) => {
-                            headers.set(key, value);
-                        });
-                        return headers;
-                    },
-                    setCookie: (key: string, value: string, options: string[][] = []) => {
-                        if (options.length === 0) {
-                            res.writeHeader("Set-Cookie", `${key}=${value}`);
-                        } else {
-                            res.writeHeader("Set-Cookie", `${key}=${value};${options.map(x => `${x[0]}=${x[1]}`).join(";")}`);
-                        }
-                    },
-                    getCookies: () => {
-                        const cookies = req.getHeader("cookie");
-                        if (!cookies) return {};
-                        return cookies.split(";")
-                            .reduce((acc: any, curr: string) => {
-                                const [key, value] = curr.split("=");
-                                acc[key.trim()] = value.trim();
-                                return acc;
-                            }, {});
-                    },
-                    getCookie: (name: string) => (req.getHeader('cookie')).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
-                    writeHeader: (key: string, value: string) => {
-                        res.writeHeader(key, value);
-                    },
-                    status: (code: number) => {
-                        res.writeStatus(code.toString());
-                    },
-                    context
+                        } : undefined,
+                        params: () => {
+                            const queries = queryParser(req.getQuery());
+                            const params = pageName.includes(":") ? this.getParams() : undefined;
+                            if (params && queries) {
+                                return { ...queries, ...(p || Object.fromEntries(params)) }
+                            }
+                            return (params || p) ? (p || Object.fromEntries(params)) : queries ? { ...queries } : undefined;
+                        },
+                        headers: () => {
+                            const headers = new Map<string, string>();
+                            req.forEach((key, value) => {
+                                headers.set(key, value);
+                            });
+                            return headers;
+                        },
+                        setCookie: (key: string, value: string, options: string[][] = []) => {
+                            if (options.length === 0) {
+                                res.writeHeader("Set-Cookie", `${key}=${value}`);
+                            } else {
+                                res.writeHeader("Set-Cookie", `${key}=${value};${options.map(x => `${x[0]}=${x[1]}`).join(";")}`);
+                            }
+                        },
+                        getCookies: () => {
+                            const cookies = req.getHeader("cookie");
+                            if (!cookies) return {};
+                            return cookies.split(";")
+                                .reduce((acc: any, curr: string) => {
+                                    const [key, value] = curr.split("=");
+                                    acc[key.trim()] = value.trim();
+                                    return acc;
+                                }, {});
+                        },
+                        getCookie: (name: string) => (req.getHeader('cookie')).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
+                        writeHeader: (key: string, value: string) => {
+                            res.writeHeader(key, value);
+                        },
+                        status: (code: number) => {
+                            res.writeStatus(code.toString());
+                        },
+                        context
 
-                });
-                const data = (dataCall?.then) ? await dataCall : dataCall;
-
-                if (typeof data === "undefined") {
-                    return res.end();
-                }
-                if (data.stream) {
-                    if (!data.length) {
-                        logger.error("Error reading stream");
-                        return this.renderError({
-                            error: 500
-                        })
-                    }
-                    const stream: Readable = data.stream;
-
-                    stream.on("error", (e) => {
-                        logger.error(e);
-                        return this.renderError({
-                            error: 500
-                        })
                     });
-                    this.pipeStreamOverResponse(res, stream, data.length);
-                } else if (data.subscribe) {
-                    res.cork(() => {
+                    const data = (dataCall?.then) ? await dataCall : dataCall;
+
+                    if (typeof data === "undefined") {
+                        return res.end();
+                    }
+                    if (data.stream && data.length) {
+                        if (!data.length) {
+                            logger.error("Error reading stream");
+                            return this.renderError({
+                                error: 500
+                            })
+                        }
+                        const stream: Readable = data.stream;
+
+                        stream.on("error", (e) => {
+                            logger.error(e);
+                            return this.renderError({
+                                error: 500
+                            })
+                        });
+                        this.pipeStreamOverResponse(res, stream, data.length);
+                    } else if (data.subscribe) {
                         res.writeHeader("Content-Type", "application/json");
                         const dispose = data.subscribe((x: any) => {
                             logger.debug("Streamed data", x);
@@ -578,17 +578,18 @@ export class RenderAPI extends Streamable {
                                 clearInterval(t);
                             }
                         }, 500)
-                    })
 
-                } else {
-                    if (!res.aborted) {
-                        return res.cork(() => {
+                    } else {
+                        if (!res.aborted) {
                             res.writeHeader("Content-Type", "application/json");
                             res.end(JSON.stringify(data));
-                        });
+                        }
+
+                        if (api.onClosing) {
+                            await api.onClosing();
+                        }
                     }
-                }
-                return;
+                });
 
             } else {
                 return this.renderError({

@@ -181,7 +181,6 @@ export default async function server(env = "production") {
     }
 
     const authFilter = (req: uws.HttpRequest, res: uws.HttpResponse, next: any) => {
-        console.time("authFilter");
         if (ryoConfig.security) {
             if (ryoConfig.security.csrf !== false) {
                 const reqMethod = req.getMethod().toLocaleUpperCase();
@@ -231,7 +230,6 @@ export default async function server(env = "production") {
                 handleAuth(req, res, next);
             }
         }
-        console.timeEnd("authFilter");
     }
 
     const handleSubdomains = (req: any, res: any, next: any) => {
