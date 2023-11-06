@@ -12,6 +12,14 @@ declare module "RyoApi" {
     }
 
     export type ApiPayload = GetApiPayload & {
-        body: (() => Promise<Buffer | string>)
+        body: (() => Promise<Buffer | string | { [key: string]: any }>)
+    }
+
+    export type SSEPayload = {
+        url: string;
+        params: { [k: string]: (string | string[]) } | undefined;
+        headers: Map<string, string>;
+        getCookie: (name: string) => string | undefined;
+        context: Map<string, any>
     }
 }

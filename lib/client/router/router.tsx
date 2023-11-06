@@ -15,7 +15,8 @@ export default function Router() {
          const params = window.fetchParams();
 
          setState((p: any) => ({
-            ...p, params, isLoading: false,
+            ...p, params,
+            isLoading: false,
             push: (path: string) => {
                //@ts-ignore
                window.framework.ROUTER.go(path)

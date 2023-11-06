@@ -1,7 +1,7 @@
 import * as uws from "uWebSockets.js";
 import { AbstractRender, EventStreamHandler, RenderAPI, RenderData, RenderEvent, RenderGraphQL, RenderPage, RenderProps, RenderServer, RenderStatic, RenderError } from "./runtime/render";
 import { join } from "path";
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import ps from "./utils/pubsub";
 
 import babelRegister from "@babel/register";
@@ -53,8 +53,12 @@ export default async function server(env = "production") {
 
     const ryoConfig = await loadConfig()
 
-    const buildReport = _require(join(pwd, ".ssr", "build-report.json"));
-    const buildOfflineReport = _require(join(pwd, ".ssr", "build-offline-report.json"));
+    const ssrdir = join(pwd, ryoConfig.build?.outDir ?? ".ssr");
+
+
+    const buildReport = _require(join(ssrdir, "build-report.json"));
+    const buildOfflineReport = _require(join(ssrdir, "build-offline-report.json"));
+    const buildId = readFileSync(join(ssrdir, "build-id"), "utf-8");
 
     const isStatic = new Map();
 
@@ -357,7 +361,8 @@ export default async function server(env = "production") {
             pathname: path || req.getUrl(),
             isDev: (process.env.NODE_ENV === "development") || (env === "dev"),
             context: globalContext,
-            params: params
+            params: params,
+            buildId,
         }
     }
 
@@ -732,7 +737,7 @@ export default async function server(env = "production") {
                 });
             }
 
-            app.get(`${pageServerName}.bundle.js`, (res, req) => {
+            app.get(`${pageServerName}-${buildId}.bundle.js`, (res, req) => {
                 return middlewareFn(
                     req, res,
                     () => {

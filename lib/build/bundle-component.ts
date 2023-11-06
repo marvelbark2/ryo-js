@@ -1,9 +1,28 @@
 import { join } from "path";
-import { BuildOptions, analyzeMetafile, build } from "esbuild";
+import { BuildOptions, analyzeMetafile, build, context } from "esbuild";
 import compress from "@luncheon/esbuild-plugin-gzip";
 import { cssModulesPlugin } from "@asn.aeb/esbuild-css-modules-plugin";
-import ignoreUnused from "./plugins/ignore-unused";
 import { existsSync } from "fs";
+import { getBuildVersion } from "../utils/build-utils";
+
+
+
+const optionHooks = () => `
+// import { options } from 'preact';
+
+// // Store previous hook
+// const oldHook = options.vnode;
+
+// // Set our own options hook
+// options.vnode = vnode => {
+//   console.log("Hey I'm a vnode", vnode);
+
+//   // Call previously defined hook if there was any
+//   if (oldHook) {
+//     oldHook(vnode);
+//   }
+// }
+`
 const fetchParams = (pageName: string) => {
     if (pageName.includes(':')) {
         return `window.fetchParams = () => {
@@ -44,13 +63,14 @@ const getWSDataReload = (data: any, pageName: string) => {
                 const deserializedData = new window.framework.DESERIALIZE(data.payload);
                 const newElement = h(Component, {data: deserializedData.fromJSON()})
                 const EL = document.getElementById("${pageName}")
-                EL.innerHTML = "";
+                //EL.innerHTML = "";
                 hydrate(newElement, EL)
             }
         }
         }`
 }
-const getHydrationScript = async (filePath: string, pageName: string, data: any, parent: any, entryPath?: string) => {
+
+const getHydrationScript = (filePath: string, pageName: string, data: any, parent: any, entryPath?: string) => {
     return `
     import "preact/debug";
     import {h, render, hydrate} from "preact"
@@ -60,6 +80,8 @@ const getHydrationScript = async (filePath: string, pageName: string, data: any,
             }`}
   
     document.getElementById("${pageName}").innerHTML = "";
+
+    ${optionHooks()}
   
     if(window.getData) {
       const data = JSON.stringify(window.getData());
@@ -90,7 +112,7 @@ const getHydrationScript = async (filePath: string, pageName: string, data: any,
 };
 
 
-const getHydrationOfflineScript = async (filePath: string, pageName: string, parent: any) => `
+const getHydrationOfflineScript = (filePath: string, pageName: string, parent: any) => `
   import "preact/debug";
   import {h, render, hydrate} from "preact"
   ${parent ? `import { Parent, offline } from "${filePath}"` :
@@ -115,6 +137,8 @@ const getHydrationOfflineScript = async (filePath: string, pageName: string, par
 const entryPath = join(process.cwd(), ".ssr/output/entry.js");
 const exisitsEntry = existsSync(entryPath)
 
+const buildId = getBuildVersion();
+
 export async function generateClientBundle({
     filePath,
     tsconfig,
@@ -138,7 +162,7 @@ export async function generateClientBundle({
         jsxFactory: "h",
         jsxFragment: "Fragment",
         legalComments: "none",
-        write: false,
+        write: true,
     }
 }: { filePath: string; outdir?: string; pageName: string; bundleConstants?: BuildOptions; data: any; parent?: any, tsconfig?: string }) {
     try {
@@ -146,7 +170,7 @@ export async function generateClientBundle({
             ...bundleConstants,
             jsxImportSource: "preact",
             stdin: {
-                contents: await getHydrationScript(
+                contents: getHydrationScript(
                     filePath,
                     pageName,
                     data,
@@ -155,15 +179,11 @@ export async function generateClientBundle({
                 ),
                 resolveDir: process.cwd(),
             },
-            //format: "iife",
-            //  platform: 'neutral',
             plugins: [
-                compress({ gzip: true }),
-                ignoreUnused(),
                 cssModulesPlugin({
                     emitCssBundle: {
                         path: '.ssr/output/static/css',
-                        filename: pageName + ".module",
+                        filename: `${pageName}-${buildId}.module`,
                     }
                 })
             ],
@@ -172,7 +192,7 @@ export async function generateClientBundle({
                 'process.env.NODE_ENV': `"${process.env.NODE_ENV}"`,
             },
 
-            outfile: join(".ssr/output/static", `${pageName}.bundle.js`),
+            outfile: join(".ssr/output/static", `${pageName}-${buildId}.bundle.js`),
             keepNames: /**process.env.NODE_ENV === "development" */ true,
             metafile: true,
             tsconfig,
@@ -186,6 +206,9 @@ export async function generateClientBundle({
                 console.log(text)
             }
         }
+
+
+
 
         return result;
 
@@ -249,13 +272,7 @@ export async function generateOfflineClientBundle({
                             }
                         });
                     }
-                },
-                // cssModulesPlugin({
-                //     emitCssBundle: {
-                //         path: 'static/css',
-                //         filename: pageName,
-                //     }
-                // })
+                }
             ],
 
             define: {

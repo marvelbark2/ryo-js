@@ -1,4 +1,4 @@
-
+//@ts-ignore
 import flamethrower from 'flamethrower-router';
 
 import { Deserializer } from "../utils/serializer"

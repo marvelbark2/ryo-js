@@ -11,8 +11,61 @@ import { Serializer } from "../utils/serializer.js";
 import { minify } from "html-minifier";
 import { generateFramework } from "./create-framework.js";
 import { csrf } from "../utils/security.js";
+import { getBuildVersion } from "../utils/build-utils.js";
 
 const projectPkg = getProjectPkg()
+const buildId = getBuildVersion();
+
+async function generatePostApi(filePath: string, pageName: string, tsconfig?: string) {
+  try {
+    const pkg = await projectPkg;
+    const result = await build({
+      stdin: {
+        contents: `
+        export {post} from "${filePath}"
+      `,
+        resolveDir: process.cwd(),
+      },
+      bundle: true,
+      format: "esm",
+      treeShaking: true,
+      metafile: true,
+      minify: true,
+      outfile: join(".ssr/output/server", `${pageName}.data.js`),
+      tsconfig: tsconfig,
+      platform: "node",
+      plugins: [
+        {
+          name: 'no-side-effects',
+          setup(build) {
+            build.onResolve({ filter: /.*/ }, async args => {
+              if (args.pluginData) return // Ignore this if we called ourselves
+
+              const { path, ...rest } = args
+              rest.pluginData = true // Avoid infinite recursion
+              const result = await build.resolve(path, rest)
+
+              result.sideEffects = false
+              return result
+            })
+          }
+        }
+      ],
+      external: [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {}), ...Object.keys(pkg.devDependencies || {}), "react", "preact"].filter(x => !x.includes('ryo.js')),
+    })
+
+    if (result.metafile) {
+      const text = await analyzeMetafile(result.metafile, {
+        verbose: true,
+      })
+      console.log(text)
+    }
+    return result;
+  } catch (error) {
+    throw new Error(`Error while generating data for ${pageName}. ${error}`);
+  }
+}
+
 async function generateData(filePath: string, pageName: string, tsconfig?: string) {
   try {
     const pkg = await projectPkg;
@@ -92,10 +145,9 @@ export async function createStaticFile(
   options: { bundle: boolean; data: boolean; outdir: string; fileName?: string } | undefined = { bundle: true, data: false, outdir: ".ssr/output/static", fileName: undefined }
 ) {
   const outdir = options?.outdir || join(".ssr/output/static");
-
-
   try {
     // TODO: Add entry.tsx
+    console.time(`[static] ${pageName} - ${filePath}`);
     const Wrapper = getOrNullGlobalEntry() || EntryClient;
     const App = Component.default || Component;
     const ParentLayout = Component.Parent || Wrapper;
@@ -132,7 +184,14 @@ export async function createStaticFile(
       await saveDataIntoJson({ data, pageName });
     }
 
+
+    if (Component.post) {
+      await generatePostApi(filePath, pageName, tsconfig);
+    }
+
+    console.time(`[static] bundle ${pageName}`);
     const jsBundled = await generateClientBundle({ filePath, outdir, pageName, tsconfig, data: Component.data, parent: Component.Parent });
+    console.timeEnd(`[static] bundle ${pageName}`);
 
     const Offline = Component.offline
     const isOfflineSupported = typeof Offline !== "undefined";
@@ -191,12 +250,17 @@ export async function createStaticFile(
       OFFLINES_PAGES.add(pageName)
     }
 
+    console.time(`[static] render ${pageName}`);
+
     const Element = h(App, { data: data ?? null }, null);
     const Parent = createElement(Wrapper, { Parent: ParentLayout, Child: Element, id: pageName }, Element);
     const hasCss = Object.values(jsBundled.metafile.outputs).some((output) => output.cssBundle !== undefined);
     const hasCssModule = existsSync(join(outdir, "css", pageName + ".module.css"))
 
     const csrfToken = isCsrf ? csrf.generateToken() : null
+
+    const pageNameWithBuildId = `${pageName}-${buildId}`
+
     const html = `<!DOCTYPE html>
     <html lang="en">
     <head>
@@ -206,17 +270,17 @@ export async function createStaticFile(
       <link rel="preload" href="/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
       <noscript><link rel="stylesheet" href="/styles.css"></noscript>
       ${hasCss ?
-        `<link rel="preload" href="/${pageName}.bundle.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-      <noscript><link rel="stylesheet" href="/${pageName}.bundle.css"></noscript>`
+        `<link rel="preload" href="/${pageNameWithBuildId}.bundle.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+      <noscript><link rel="stylesheet" href="/${pageNameWithBuildId}.bundle.css"></noscript>`
         : ''}
-      ${hasCssModule ? `<link rel="preload" href="/css/${pageName}.module.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-      <noscript><link rel="stylesheet" href="/css/${pageName}.module.css"></noscript>` : ''}
+      ${hasCssModule ? `<link rel="preload" href="/css/${pageNameWithBuildId}.module.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+      <noscript><link rel="stylesheet" href="/css/${pageNameWithBuildId}.module.css"></noscript>` : ''}
       <script src="/framework-system.js" defer></script>
     </head>
     <body>
       <div id="root">${render(Parent)}</div>
       ${Component.data ? `<script src="/${pageName}.data.js" ></script>` : ''}
-      <script src="/${pageName}.bundle.js" defer></script>
+      <script src="/${pageNameWithBuildId}.bundle.js" defer></script>
       ${isOfflineSupported ? `
       <script>
         if (window !== undefined) {
@@ -230,6 +294,8 @@ export async function createStaticFile(
       ` : ""}
     </body>
     </html>`;
+    console.timeEnd(`[static] render ${pageName}`);
+
     writeFileSync(
       join(outdir, options?.fileName || `${pageName}.html`),
       minify(html, {
@@ -237,9 +303,9 @@ export async function createStaticFile(
         removeComments: true,
         minifyJS: true,
         minifyCSS: true
-
       })
     );
+    console.timeEnd(`[static] ${pageName} - ${filePath}`);
 
   } catch (error) {
     console.error(error);

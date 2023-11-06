@@ -14,6 +14,8 @@ export async function generateServerScript({
         loader: { ".ts": "ts", ".js": "js" },
     }
 }: { comp: any; outdir?: string; pageName: string; bundleConstants?: any, tsConfig?: string }) {
+    console.time(`[server] ${pageName} - ${comp}`);
+
     const isWS = comp.endsWith(".ws.js") || comp.endsWith(".ws.ts");
     const out = join(outdir, isWS ? "ws" : ".", `${pageName}.js`)
 
@@ -33,7 +35,7 @@ export async function generateServerScript({
         if (result.errors.length > 0) {
             console.error(result.errors)
         } else {
-            console.log(`✅ Generated server script for ${pageName}`);
+            console.timeEnd(`[server] ${pageName} - ${comp}`);
         }
     }).catch(console.error)
 }

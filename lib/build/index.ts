@@ -27,6 +27,7 @@ import RouteValidator from "./validators/RouteValidator";
 import logger from "../utils/logger";
 import type { RyoConfig as Config } from '../../types/index';
 import ignoreUnused from "./plugins/ignore-unused";
+import { getBuildVersion } from "../utils/build-utils";
 
 const buildReport: any = {};
 
@@ -35,7 +36,7 @@ const isTsConfigFileExists = existsSync(tsConfigFile);
 
 const tsConfig = isTsConfigFileExists ? tsConfigFile : undefined;
 
-//const tsConfigRaw = tsConfig ? readFileSync(tsConfig, "utf-8") : undefined
+const tsConfigRaw = tsConfig ? readFileSync(tsConfig, "utf-8") : undefined
 
 
 function generateFrameworkJSBundle() {
@@ -126,12 +127,28 @@ async function buildEntryClientTs({ pkgs }: any) {
 
 }
 
+const tsxTransformOptions = {
+    minify: true,
+    target: "es2019",
+    jsxImportSource: "preact",
+    jsx: "automatic",
+    jsxFactory: "h",
+    jsxFragment: "Fragment"
+}
+
+
+function publishBuildId(outDir: string, buildId: string) {
+    console.log("🕧 Publishing build id");
+
+    const filePath = join(process.cwd(), outDir, "build-id");
+
+    return writeFileSync(filePath, buildId);
+}
 
 
 async function buildClient(config: Config) {
     reg();
     try {
-
         const pkgs = await getProjectPkg()
         const srcDir = config.build?.srcDir || "src";
         const pages = getPages(join(process.cwd(), srcDir), join);
@@ -153,6 +170,8 @@ async function buildClient(config: Config) {
 
 
         if (routeValidator.isValide()) {
+            const buildId = getBuildVersion()
+
             const getServerTsStatus = (pageName: string) => {
                 if (pageName.endsWith(".gql")) return "graphql";
                 else if (pageName.endsWith(".ev")) return "event";
@@ -177,18 +196,30 @@ async function buildClient(config: Config) {
                     console.timeEnd(`🕧 Building: ${pageName}`);
                     return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
                 } else if (page.endsWith(".tsx")) {
-                    const modulePath = join(ssrdir, "tsxpage", `${pageName}.js`);
-                    await buildSync({
+                    console.time("Compiling tsx " + pageName);
+                    const result = await buildSync({
                         entryPoints: [page],
                         bundle: true,
                         treeShaking: true,
                         tsconfig: isTsConfigFileExists ? tsConfigFile : undefined,
+                        write: false,
                         jsxImportSource: "preact",
                         jsx: "automatic",
                         jsxFactory: "h",
                         jsxFragment: "Fragment",
-                        platform: "neutral",
-                        format: "cjs",
+                        platform: "node",
+                        // loader: {
+                        //     ".ts": "ts",
+                        //     ".tsx": "tsx",
+                        //     ".js": "js",
+                        //     ".jsx": "jsx",
+                        //     '.png': 'dataurl',
+                        //     '.svg': 'text',
+                        //     '.woff': 'dataurl',
+                        //     '.woff2': 'dataurl',
+                        //     '.eot': 'dataurl',
+                        //     '.ttf': 'dataurl',
+                        // },
                         plugins: [
                             {
                                 name: 'empty-css-imports',
@@ -197,25 +228,28 @@ async function buildClient(config: Config) {
                                         contents: '',
                                     }))
                                 },
-                            },
-                            ignoreUnused()
+                            }
                         ],
-                        outfile: modulePath,
-                        write: true,
+                        allowOverwrite: true,
                         external: ["preact", "react", ...Object.keys(pkgs.dependencies || {}), ...Object.keys(pkgs.peerDependencies || {}), ...Object.keys(pkgs.devDependencies || {})]
                     })
+                    const code = result.outputFiles[0].text;
 
-                    try {
-                        const Component = require(join(process.cwd(), modulePath));
-                        return await buildComponent(Component, page, pageName, outdir, outWSdir, config);
+                    const Component = importFromStringSync(code, {
+                        transformOptions: {
+                            ...tsxTransformOptions,
+                            jsx: "automatic",
+                            loader: "tsx",
+                            tsconfigRaw: tsConfigRaw
+                        },
+                        filename: page,
+                        useCurrentGlobal: true,
+                    });
 
-                    } catch (error) {
-                        console.error({
-                            error,
-                            page,
-                            modulePath
-                        });
-                    }
+                    console.timeEnd("Compiling tsx " + pageName);
+
+                    return await buildComponent(Component, page, pageName, outdir, outWSdir, config);
+
                 } else {
                     const Component_2 = await import(page);
                     return await buildComponent(Component_2, page, pageName, outdir, outWSdir, config);
@@ -224,9 +258,13 @@ async function buildClient(config: Config) {
             });
 
             await Promise.all([...allBuilds, buildMiddleware()]);
+            console.time("Extra building");
+
             generateFrameworkJSBundle();
             copyPublicFiles();
+            publishBuildId(ssrdir, buildId)
 
+            console.timeEnd("Extra building");
             return buildReport;
 
         } else {
@@ -243,6 +281,7 @@ async function buildClient(config: Config) {
 function copyPublicFiles() {
     const publicDir = join(process.cwd(), "public");
     const outdir = join(".ssr", "output/static");
+    console.time("Copying public files")
     if (existsSync(publicDir)) {
         if (!existsSync(outdir)) {
             mkdirSync(outdir, { recursive: true });
@@ -262,6 +301,7 @@ function copyPublicFiles() {
             createReadStream(file).pipe(createWriteStream(join(outdir, fileName)));
         })
     }
+    console.timeEnd("Copying public files")
 }
 
 async function buildMiddleware() {
@@ -274,9 +314,9 @@ async function buildMiddleware() {
     }
 
     if (path) {
-        console.time(`🕧 Building: middleware`);
+        console.time(`Building: middleware`);
         await generateServerScript({ comp: path, outdir: join(".ssr", "output"), pageName: "middleware" });
-        console.timeEnd(`✅ Building: middleware`);
+        console.timeEnd(`Building: middleware`);
         return true;
     }
 }

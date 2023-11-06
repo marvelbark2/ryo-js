@@ -32,6 +32,7 @@ export interface RenderProps {
     buildReport: any
     render?: boolean
     context: Map<string, any>
+    buildId: string
     directRender?: boolean
     params?: any
 }
@@ -210,6 +211,12 @@ export class Streamable extends AbstractRender {
         return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
     }
 
+    uInt8ArrayToArrayBuffer(uint8Array: Uint8Array) {
+        return uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength);
+    }
+
+
+
     /* Either onAborted or simply finished request */
     onAbortedOrFinishedResponse(res: uws.HttpResponse, readStream: Readable) {
 
@@ -225,11 +232,8 @@ export class Streamable extends AbstractRender {
 
     /* Helper function to pipe the ReadaleStream over an Http responses */
     pipeStreamOverResponse(res: uws.HttpResponse, readStream: Readable, totalSize: number, compressed = false) {
-
-
         /* Careful! If Node.js would emit error before the first res.tryEnd, res will hang and never time out */
         /* For this demo, I skipped checking for Node.js errors, you are free to PR fixes to this example */
-
         readStream.on('data', (chunk) => {
             /* We only take standard V8 units of data */
             const ab = this.toArrayBuffer(chunk);
@@ -286,11 +290,49 @@ export class Streamable extends AbstractRender {
         });
 
     }
+
+    pipeReadableStreamOverResponse(res: uws.HttpResponse, readableStream: ReadableStream<Uint8Array>) {
+        const reader = readableStream.getReader();
+        const t = setInterval(async () => {
+            const { done, value } = await reader.read();
+
+            console.log(done, value);
+            if (done) {
+                res.end();
+                clearInterval(t);
+                return;
+            } else if (value) {
+                const lastOffset = res.getWriteOffset();
+
+                const ab = this.uInt8ArrayToArrayBuffer(value);
+                const totalSize = value.byteLength
+                /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
+                const [ok] = res.tryEnd(ab, value.byteLength);
+
+                if (!ok) {
+                    /* If we could not send this chunk, pause */
+                    /* Save unsent chunk for when we can send it */
+                    res.ab = ab;
+                    res.abOffset = lastOffset;
+
+                    /* Register async handlers for drainage */
+                    res.onWritable((offset) => {
+                        /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
+
+                        /* On failure the timeout will start */
+                        const [ok] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
+                        return ok;
+                    });
+                }
+                res.write(value as any);
+            }
+        }, 1)
+
+    }
 }
 
 
 export class RenderServer extends AbstractRender {
-
     async render() {
         const { res, pathname: path, req } = this.options;
         res.onAborted(() => {
@@ -362,6 +404,8 @@ export class RenderServer extends AbstractRender {
                 <head>
                     <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <link rel="preload" href="/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+                    <noscript><link rel="stylesheet" href="/styles.css"></noscript>
                     ${head}
                 </head>
                 <body>
@@ -372,7 +416,9 @@ export class RenderServer extends AbstractRender {
                 </body>
             </html>
             `
-            return res.end(finalHtml);
+            return res.cork(() => {
+                res.end(finalHtml);
+            })
         } catch (e) {
             console.error(e);
             return this.renderError({
@@ -388,13 +434,16 @@ export class RenderServer extends AbstractRender {
 
 export class EventStreamHandler {
     constructor(private res: uws.HttpResponse) { }
-    handle(onSend: (onData: (data: any) => any) => any, onAbort: (chain?: any) => any) {
+    handle(onSend: (onData: (data: any, eventName?: string) => any) => any, onAbort: (chain?: any) => any) {
         const res = this.res;
+
         this.sendHeaders(res);
         res.writeStatus('200 OK');
 
-        const chainPayload = onSend((data) => {
-            res.write(this.serializeData(data))
+        const chainPayload = onSend((data, eventName) => {
+            res.cork(() => {
+                res.write(this.serializeData(data, eventName))
+            })
         })
 
         res.onAborted(() => {
@@ -402,7 +451,10 @@ export class EventStreamHandler {
         })
     }
 
-    serializeData(data: any) {
+    serializeData(data: any, eventName?: string) {
+        if (eventName) {
+            return `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`
+        }
         return `data: ${JSON.stringify(data)}\n\n`
     }
     sendHeaders(res: uws.HttpResponse) {
@@ -420,16 +472,25 @@ export class RenderEvent extends AbstractRender {
         ['Cache-Control', 'no-cache']
     ]
     abstractRender(isDev = false) {
-        const { res, req, pathname: pageName } = this.options;
+        const { res, req, pathname: pageName, context } = this.options;
         res.onAborted(() => {
             res.aborted = true;
         });
+
+        const cookies = req.getHeader("cookie");
         const getEvent = this.getModuleFromPage(isDev);
         const event = getEvent.default;
         const payload = {
             url: req.getUrl(),
-            params: undefined
+            params: undefined,
+            context: context,
+            getCookie: (name: string) => (cookies).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
+            headers: new Map<string, string>()
         }
+
+        req.forEach((key, value) => {
+            payload.headers.set(key, value);
+        })
 
         if (pageName.includes("/:")) {
             const params = this.getParams();
@@ -446,18 +507,36 @@ export class RenderEvent extends AbstractRender {
 
         if (event) {
             const eventStreamHandler = new EventStreamHandler(res);
-            eventStreamHandler.handle(
-                (sendData) => {
-                    return setInterval(async () => {
-                        sendData(await event.runner(payload))
-                    }, event.invalidate)
-                },
-                (intervall) => {
-                    if (intervall) {
-                        clearInterval(intervall)
+
+            if (typeof event === "function") {
+
+                const eventCall = event(payload);
+                eventStreamHandler.handle(
+                    (sendData) => eventCall.onSend(sendData),
+                    (r) => eventCall.onAbort && eventCall.onAbort(r)
+                )
+            } else {
+                eventStreamHandler.handle(
+                    (sendData) => {
+                        return setInterval(async () => {
+                            const preData = await event.runner(payload)
+                            if (preData.$event) {
+                                const ev = preData.$event;
+                                delete preData.$event;
+                                sendData(preData, ev);
+                            } else {
+                                sendData(preData);
+                            }
+                        }, event.invalidate)
+                    },
+                    (intervall) => {
+                        if (intervall) {
+                            clearInterval(intervall)
+                        }
                     }
-                }
-            )
+                )
+            }
+
 
         } else {
             logger.error("No event found");
@@ -472,21 +551,27 @@ export class RenderEvent extends AbstractRender {
     }
 
 }
-
-
 export class RenderAPI extends Streamable {
     async render() {
         const { res, req, pathname: pageName, context, params: p } = this.options;
-        try {
-            res.onAborted(() => {
-                res.aborted = true;
-            });
-            const method = req.getMethod().toLowerCase();
-            const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
-            const api = this.getAPIMethod(pageName, method, xVersion);
+        return res.cork(async () => {
+            try {
+                const cookies = req.getHeader("cookie");
+                res.onAborted(() => {
+                    res.aborted = true;
+                });
 
-            if (api) {
-                return res.cork(async () => {
+
+                const method = req.getMethod().toLowerCase();
+                const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
+                const api = this.getAPIMethod(pageName, method, xVersion);
+
+                if (api) {
+                    const onAborted = () => {
+                        if (api.onClosing) {
+                            api.onClosing();
+                        }
+                    }
                     const dataCall = api({
                         url: pageName,
                         body: method !== "get" ? async () => {
@@ -523,7 +608,6 @@ export class RenderAPI extends Streamable {
                             }
                         },
                         getCookies: () => {
-                            const cookies = req.getHeader("cookie");
                             if (!cookies) return {};
                             return cookies.split(";")
                                 .reduce((acc: any, curr: string) => {
@@ -532,37 +616,51 @@ export class RenderAPI extends Streamable {
                                     return acc;
                                 }, {});
                         },
-                        getCookie: (name: string) => (req.getHeader('cookie')).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
+                        getCookie: (name: string) => (cookies).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
                         writeHeader: (key: string, value: string) => {
                             res.writeHeader(key, value);
                         },
                         status: (code: number) => {
                             res.writeStatus(code.toString());
                         },
+
+                        write: (data: string | Object) => {
+                            if (typeof data === "string") {
+                                res.write(data);
+                            } else {
+                                res.write(JSON.stringify(data));
+                            }
+                        },
                         context
 
                     });
                     const data = (dataCall?.then) ? await dataCall : dataCall;
 
-                    if (typeof data === "undefined") {
-                        return res.end();
-                    }
-                    if (data.stream && data.length) {
+                    if (typeof data === "undefined" || !data) {
+                        res.end();
+
+                        return onAborted()
+                    } else if (data.stream && data.length) {
                         if (!data.length) {
                             logger.error("Error reading stream");
-                            return this.renderError({
+                            this.renderError({
                                 error: 500
                             })
-                        }
-                        const stream: Readable = data.stream;
 
-                        stream.on("error", (e) => {
-                            logger.error(e);
-                            return this.renderError({
-                                error: 500
-                            })
-                        });
-                        this.pipeStreamOverResponse(res, stream, data.length);
+                            return onAborted()
+                        } else {
+                            const stream: Readable = data.stream;
+
+                            stream.on("error", (e) => {
+                                logger.error(e);
+                                return this.renderError({
+                                    error: 500
+                                })
+                            });
+                            this.pipeStreamOverResponse(res, stream, data.length);
+
+                            return onAborted()
+                        }
                     } else if (data.subscribe) {
                         res.writeHeader("Content-Type", "application/json");
                         const dispose = data.subscribe((x: any) => {
@@ -575,35 +673,67 @@ export class RenderAPI extends Streamable {
                             if (dispose.closed) {
                                 dispose.unsubscribe();
                                 res.end();
+                                onAborted()
                                 clearInterval(t);
                             }
-                        }, 500)
+                        }, 50)
+
+                        return;
+                    } else if (data instanceof Response) {
+                        const clonedData: Response = data;
+
+                        clonedData.headers.forEach((value, key) => {
+                            res.writeHeader(key, value);
+                        });
+
+                        if (clonedData.status) {
+                            if (clonedData.statusText) {
+                                res.writeStatus(`${clonedData.status} ${clonedData.statusText}`);
+                            } else {
+                                res.writeStatus(clonedData.status.toString());
+                            }
+                        }
+
+                        const resBody = clonedData.body;
+                        if (resBody) {
+                            console.log(resBody.toString());
+                            if (typeof resBody === "string") {
+                                res.write(resBody);
+                            } else if ("getReader" in resBody) {
+                                this.pipeReadableStreamOverResponse(res, resBody);
+                                return onAborted();
+                            } else if (Buffer.isBuffer(resBody)) {
+                                const buf: Buffer = resBody;
+                                res.tryEnd(buf, buf.byteLength);
+                                return onAborted();
+
+                            }
+                        }
+                        return onAborted();
 
                     } else {
                         if (!res.aborted) {
-                            res.writeHeader("Content-Type", "application/json");
-                            res.end(JSON.stringify(data));
-                        }
-
-                        if (api.onClosing) {
-                            await api.onClosing();
+                            res.cork(() => {
+                                res.writeHeader("Content-Type", "application/json");
+                                res.end(JSON.stringify(data));
+                                onAborted()
+                            })
                         }
                     }
-                });
-
-            } else {
+                } else {
+                    return this.renderError({
+                        error: 405,
+                    })
+                }
+            } catch (e) {
+                logger.error(e);
                 return this.renderError({
-                    error: 405,
+                    error: 500,
+                    err: (e as any)
                 })
             }
 
-        } catch (e) {
-            logger.error(e);
-            return this.renderError({
-                error: 500,
-                err: (e as any)
-            })
-        }
+        });
     }
 
     renderDev() {
@@ -617,7 +747,9 @@ export class RenderAPI extends Streamable {
             return cacheAPIMethods.get(key);
         } else {
             const api = this.getModuleFromPage(this.options.isDev);
-            const result = api[methodName];
+            const methodKey = Object.keys(api).find(x => x.toLowerCase() === methodName.toLowerCase());
+            if (!methodKey) return undefined;
+            const result = api[methodKey];
             if (!result) return undefined;
             cacheAPIMethods.set(key, result);
             return result;
