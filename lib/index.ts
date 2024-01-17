@@ -49,9 +49,17 @@ export default async function server(env = "production") {
 
     shouldRestart.push("N");
 
-    const app = uws.App();
 
-    const ryoConfig = await loadConfig()
+    const ryoConfig = await loadConfig();
+
+    const app = ryoConfig.ssl ? (
+        uws.SSLApp({
+            key_file_name: ryoConfig.ssl?.key_file_name,
+            cert_file_name: ryoConfig.ssl?.cert_file_name,
+            passphrase: ryoConfig.ssl?.passphrase,
+        })
+    ) : uws.App()
+
 
     const ssrdir = join(pwd, ryoConfig.build?.outDir ?? ".ssr");
 
@@ -1054,7 +1062,7 @@ export default async function server(env = "production") {
             uwsToken = token;
             logger.info("Listening to port " + port);
         } else {
-            logger.error("Failed to listen to port 3000");
+            logger.error("Failed to listen to port " + port);
         }
     });
     return () => {

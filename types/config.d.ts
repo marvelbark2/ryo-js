@@ -18,6 +18,11 @@ type A = (AuthContextPayload & {
 declare module "RyoConfig" {
     export type RyoConfig = {
         port?: number;
+        ssl?: {
+            key_file_name: string,
+            cert_file_name: string,
+            passphrase: string
+        }
         build?: {
             outDir?: string;
             srcDir?: string;
@@ -25,7 +30,7 @@ declare module "RyoConfig" {
 
         subdomain?: {
             baseHost?: string;
-        }
+        },
 
         security?: {
             csrf?: boolean;

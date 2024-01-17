@@ -73,7 +73,7 @@ const getWSDataReload = (data: any, pageName: string) => {
 const getHydrationScript = (filePath: string, pageName: string, data: any, parent: any, entryPath?: string) => {
     return `
     import "preact/debug";
-    import {h, render, hydrate} from "preact"
+    import {h, hydrate} from "preact"
     ${parent ? `import Component, { Parent } from "${filePath}"` :
             `import Component from "${filePath}";
         ${entryPath ? `import Parent from "${entryPath}"` : `const Parent = undefined;`
@@ -114,7 +114,7 @@ const getHydrationScript = (filePath: string, pageName: string, data: any, paren
 
 const getHydrationOfflineScript = (filePath: string, pageName: string, parent: any) => `
   import "preact/debug";
-  import {h, render, hydrate} from "preact"
+  import {h, hydrate} from "preact"
   ${parent ? `import { Parent, offline } from "${filePath}"` :
         `import {offline} from "${filePath}";
       const Parent = undefined;`}
@@ -206,9 +206,6 @@ export async function generateClientBundle({
                 console.log(text)
             }
         }
-
-
-
 
         return result;
 

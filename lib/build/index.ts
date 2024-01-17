@@ -17,7 +17,7 @@ import { getPageName, getPages } from '../utils/page';
 
 
 import { generateFramework } from "./create-framework";
-import { createStaticFile } from "./create-static";
+import { createStaticFile, createStaticVue } from "./create-static";
 import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
 import { build as buildSync } from "esbuild";
@@ -28,6 +28,7 @@ import logger from "../utils/logger";
 import type { RyoConfig as Config } from '../../types/index';
 import ignoreUnused from "./plugins/ignore-unused";
 import { getBuildVersion } from "../utils/build-utils";
+import { bundleVueComponent } from "./bundle-vue";
 
 const buildReport: any = {};
 
@@ -64,21 +65,13 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
             buildReport[`/${p}`] = "api";
         } else if (isEndsWith([".ev.js", "ev.ts"], page)) {
             buildReport[`/${p}`] = "event";
-        } else if (isEndsWith([".gql.ts", ".gql.ts"], page)) {
+        } else if (isEndsWith([".gql.ts", ".gql.js"], page)) {
             buildReport[`/${p}`] = "graphql";
         }
         console.timeEnd(`🕧 Building: ${pageName}`);
         return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
     }
 }
-// const tsxTransformOptions = {
-//     minify: true,
-//     target: "es2019",
-//     jsxImportSource: "preact",
-//     jsx: "automatic",
-//     jsxFactory: "h",
-//     jsxFragment: "Fragment"
-// }
 
 async function buildEntryClientTs({ pkgs }: any) {
     const tsxPath = join(process.cwd(), "entry.tsx");
@@ -146,6 +139,29 @@ function publishBuildId(outDir: string, buildId: string) {
 }
 
 
+
+
+async function buildVuePage({ pageName, filePath, outdir }: { pageName: string, filePath: string, pkgs: any, outdir: string }) {
+    const outFile = await bundleVueComponent({ filePath, page: pageName });
+
+    const isData = await createStaticVue({
+        filePath, page: pageName, outFile, outdir
+    })
+
+    buildReport[`/${pageName}`] = isData
+
+    return;
+
+}
+
+
+function removeDraftFolder(ssrdir: string) {
+    const draft = join(process.cwd(), ssrdir, "draft");
+    if (existsSync(draft)) {
+        rmSync(draft, { recursive: true });
+    }
+}
+
 async function buildClient(config: Config) {
     reg();
     try {
@@ -161,7 +177,7 @@ async function buildClient(config: Config) {
         const outWSdir = join(ssrdir, "output/server");
 
         const modulePages = pages
-            .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx"], page));
+            .filter((page) => isEndsWith([".js", ".jsx", ".ts", ".tsx", ".vue"], page));
 
 
         const routeValidator = new RouteValidator({
@@ -189,9 +205,16 @@ async function buildClient(config: Config) {
                 if (isEndsWith([".ws.jsx", ".ev.jsx", ".ws.tsx", ".ev.tsx", ".gql.tsx", ".gql.jsx"], page)) {
                     throw new Error("You cannot create websockets or events as components. Please create them as scripts (.js or .ts).");
                 }
+
+                if (isEndsWith([".data.ts", ".data.js"], page)) {
+                    return;
+                }
                 const pageName = getPageName(page);
                 console.time(`🕧 Building: ${pageName}`);
-                if (page.endsWith(".ts")) {
+
+                if (page.endsWith(".vue")) {
+                    return await buildVuePage({ pageName, filePath: page, pkgs, outdir });
+                } else if (page.endsWith(".ts")) {
                     buildReport[`/${pageName}`] = getServerTsStatus(pageName);
                     console.timeEnd(`🕧 Building: ${pageName}`);
                     return await generateServerScript({ comp: page, outdir: outWSdir, pageName });
@@ -263,6 +286,7 @@ async function buildClient(config: Config) {
             generateFrameworkJSBundle();
             copyPublicFiles();
             publishBuildId(ssrdir, buildId)
+            removeDraftFolder(ssrdir);
 
             console.timeEnd("Extra building");
             return buildReport;

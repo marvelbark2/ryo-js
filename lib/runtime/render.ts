@@ -790,15 +790,18 @@ export class RenderAPI extends Streamable {
 
 export class RenderGraphQL extends Streamable {
     async render() {
-        const { res, req } = this.options;
+        const { res, req, isDev } = this.options;
         try {
             const method = req.getMethod().toLowerCase();
+            console.log({
+                opt: this.options
+            });
             if (method === "post") {
                 const gqlModule = this.getModuleFromPage(this.options.isDev, true);
 
                 if (!gqlModule) {
                     return this.renderError({
-                        error: 404
+                        error: 500
                     })
                 }
                 res.onAborted(() => {
@@ -844,7 +847,7 @@ export class RenderGraphQL extends Streamable {
                     return res.end(JSON.stringify(e));
                 }
             } else {
-                if (this.options.isDev) {
+                if (isDev) {
                     const thisPage = req.getUrl()
 
                     const html = `
@@ -920,7 +923,9 @@ export class RenderGraphQL extends Streamable {
 
         } catch (e) {
             logger.error(e);
-            return this.render404()
+            return this.renderError({
+                error: 405,
+            })
         }
     }
 

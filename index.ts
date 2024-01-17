@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-import cluster from 'cluster';
-import { cpus } from 'os';
 
 import server from './lib';
 import build from './lib/build'
@@ -52,7 +50,6 @@ const buildingScript = async (config: Config) => {
     }
 }
 (async () => {
-
     if (args.includes("build")) {
         const config = await loadConfig();
         try {
@@ -70,8 +67,9 @@ const buildingScript = async (config: Config) => {
         if (args.includes("apis.type")) {
             await generateApiTypes()
         }
-
     } else {
-        console.error("Invalid command");
+        const config = await loadConfig();
+        await buildingScript(config)
+        await server("dev");
     }
 })()
