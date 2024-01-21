@@ -64,7 +64,7 @@ export abstract class AbstractRender {
 
         const { req, pathname, res, render, directRender } = this.options;
 
-        logger.debug("render options: ", { pathname })
+        logger.debug("render options: ", { pathname, method: req.getMethod(), s: this.constructor.name })
 
         if (render === false)
             return;
@@ -295,8 +295,6 @@ export class Streamable extends AbstractRender {
         const reader = readableStream.getReader();
         const t = setInterval(async () => {
             const { done, value } = await reader.read();
-
-            console.log(done, value);
             if (done) {
                 res.end();
                 clearInterval(t);
@@ -793,9 +791,7 @@ export class RenderGraphQL extends Streamable {
         const { res, req, isDev } = this.options;
         try {
             const method = req.getMethod().toLowerCase();
-            console.log({
-                opt: this.options
-            });
+
             if (method === "post") {
                 const gqlModule = this.getModuleFromPage(this.options.isDev, true);
 

@@ -80,8 +80,8 @@ export default async function server(env = "production") {
     }
     const baseHost = ryoConfig.subdomain?.baseHost;
     const isSecureContext = typeof ryoConfig.security !== "undefined";
-
-    process.env.NODE_ENV = env === 'production' ? 'production' : 'development';
+    if (!process.env.NODE_ENV)
+        process.env.NODE_ENV = env === 'production' ? 'production' : 'development';
 
 
     const getPathIfSubDomain = (path: string, origin: string) => {
@@ -364,6 +364,7 @@ export default async function server(env = "production") {
 
 
     const getRenderProps = (res: uws.HttpResponse, req: uws.HttpRequest, path = "", params?: any): RenderProps => {
+
         return {
             req, res, buildReport,
             pathname: path || req.getUrl(),
@@ -456,59 +457,6 @@ export default async function server(env = "production") {
             const isQGL = type === 'graphql';
 
             isStatic.set(path, isPage);
-
-            // if (isQGL) {
-            //     const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", `${page}.js`);
-            //     const gqlModule = require(filePath);
-
-            //     if (gqlModule) {
-            //         const gqlObject = gqlModule.default ? gqlModule.default : gqlModule;
-            //         if (gqlObject) {
-            //             app.ws(page, {
-            //                 compression: uws.SHARED_COMPRESSOR,
-            //                 maxPayloadLength: 16 * 1024 * 1024,
-            //                 idleTimeout: 16,
-
-            //                 message: async (ws, message, isBinary) => {
-            //                     const data = Buffer.from(message).toString();
-            //                     const parsed = JSON.parse(data);
-
-            //                     if (parsed.type === "connection_init") {
-            //                         // Handle connection initiation
-            //                         ws.send(JSON.stringify({ type: "connection_ack" }));
-
-            //                     } else if (parsed.type === "start") {
-            //                         // Handle GraphQL subscription start
-            //                         const { query, variables, operationName } = parsed.payload;
-
-            //                         const schema = gqlObject.schema;
-            //                         const execSchema = typeof schema === "string" ? buildSchema(schema) : await getAsyncValue(schema);
-
-            //                         const resultIterator: any = await subscribe({
-            //                             schema: execSchema,
-            //                             document: gqlParser(query),
-            //                             contextValue: gqlObject.context,
-            //                             variableValues: variables,
-            //                             operationName,
-            //                             rootValue: gqlObject.resolvers,
-            //                         });
-
-            //                         for await (const result of resultIterator) {
-            //                             ws.send(
-            //                                 JSON.stringify({
-            //                                     type: "data",
-            //                                     id: parsed.id,
-            //                                     payload: result,
-            //                                 })
-            //                             );
-            //                         }
-
-            //                     }
-            //                 }
-            //             })
-            //         }
-            //     }
-            // }
 
             const pageName = changePageToRoute(pageServerName);
 
@@ -708,7 +656,13 @@ export default async function server(env = "production") {
                 clazz: RenderGraphQL,
                 path: pageServerName,
             });
-            app.any(pageName, (res, req) => {
+            app.get(pageName, (res, req) => {
+                return middlewareFn(
+                    req, res, () => new RenderGraphQL(getRenderProps(res, req, pageServerName))
+                )
+            });
+
+            app.post(pageName, (res, req) => {
                 return middlewareFn(
                     req, res, () => new RenderGraphQL(getRenderProps(res, req, pageServerName))
                 )
@@ -775,7 +729,6 @@ export default async function server(env = "production") {
         } else {
             app.get(pageName, (res, req) => {
                 return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req, pageServerName)));
-
             })
         }
         app.get(`${pageName}/`, (res) => {
