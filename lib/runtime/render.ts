@@ -5,7 +5,7 @@ import { Fragment, h } from 'preact';
 import { render } from "preact-render-to-string";
 
 import { Readable } from 'stream';
-import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'fs';
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync, access, readFile } from 'fs';
 import { gzip } from 'zlib';
 
 import { generateClientBundle } from './transpilor';
@@ -16,6 +16,7 @@ import EntryClient from '../entry';
 import { getAsyncValue, getMiddleware } from '../utils/global';
 import { parse as queryParser } from "querystring"
 import { getParts } from 'uWebSockets.js';
+
 
 
 /** TODOS:
@@ -168,29 +169,37 @@ export abstract class AbstractRender {
     renderError({ error, err }: { error: number, err?: Error }) {
         const { res, req, pathname } = this.options;
         const middlewareFn = AbstractRender.getMiddlewareFn()
+
+        if (err) {
+            console.error("Rendering the error: ", err);
+        }
         return middlewareFn(
             req,
             res,
             () => {
                 try {
-                    const contentType = req.getHeader("accept");
-                    if (contentType.includes("text/html")) {
-                        const errRender = new RenderError({ ...this.options, error });
-                        errRender.render(() => {
+                    res.cork(() => {
+                        const contentType = req.getHeader("accept");
+                        if (contentType.includes("text/html")) {
+                            const errRender = new RenderError({ ...this.options, error });
+                            errRender.render(() => {
+                                res.writeStatus(`${error} Error`);
+                                res.end(`${error} Error - page: ${pathname}`);
+                            });
+                        } else {
                             res.writeStatus(`${error} Error`);
                             res.end(`${error} Error - page: ${pathname}`);
-                        });
-                    } else {
-                        res.writeStatus(`${error} Error`);
-                        res.end(`${error} Error - page: ${pathname}`);
-                    }
+                        }
+                    })
                 } catch (error) {
-                    try {
-                        res.writeStatus(`${error} Error`);
-                        res.end(`${error} Error - page: ${pathname}`);
-                    } catch (e) {
-                        logger.error("Error in error handler", error, e);
-                    }
+                    res.cork(() => {
+                        try {
+                            res.writeStatus(`${error} Error`);
+                            res.end(`${error} Error - page: ${pathname}`);
+                        } catch (e) {
+                            logger.error("Error in error handler", error, e);
+                        }
+                    })
                 }
             },
             {
@@ -231,7 +240,7 @@ export class Streamable extends AbstractRender {
     }
 
     /* Helper function to pipe the ReadaleStream over an Http responses */
-    pipeStreamOverResponse(res: uws.HttpResponse, readStream: Readable, totalSize: number, compressed = false) {
+    pipeStreamOverResponse(res: uws.HttpResponse, readStream: Readable, totalSize: number) {
         /* Careful! If Node.js would emit error before the first res.tryEnd, res will hang and never time out */
         /* For this demo, I skipped checking for Node.js errors, you are free to PR fixes to this example */
         readStream.on('data', (chunk) => {
@@ -239,67 +248,62 @@ export class Streamable extends AbstractRender {
             const ab = this.toArrayBuffer(chunk);
 
             /* Store where we are, globally, in our response */
-            const lastOffset = res.getWriteOffset();
-            res.cork(() => {
+            let lastOffset = res.getWriteOffset();
 
-                /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
-                const [ok, done] = res.tryEnd(ab, totalSize);
+            /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
+            let [ok, done] = res.tryEnd(ab, totalSize);
 
-                /* Did we successfully send last chunk? */
-                if (done) {
-                    this.onAbortedOrFinishedResponse(res, readStream);
-                } else if (!ok) {
-                    /* If we could not send this chunk, pause */
-                    readStream.pause();
+            /* Did we successfully send last chunk? */
+            if (done) {
+                this.onAbortedOrFinishedResponse(res, readStream);
+            } else if (!ok) {
+                /* If we could not send this chunk, pause */
+                readStream.pause();
 
-                    /* Save unsent chunk for when we can send it */
-                    res.ab = ab;
-                    res.abOffset = lastOffset;
+                /* Save unsent chunk for when we can send it */
+                res.ab = ab;
+                res.abOffset = lastOffset;
 
-                    /* Register async handlers for drainage */
-                    res.onWritable((offset) => {
-                        /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
+                /* Register async handlers for drainage */
+                res.onWritable((offset) => {
+                    /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
 
-                        /* On failure the timeout will start */
-                        const [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
-                        if (done) {
-                            this.onAbortedOrFinishedResponse(res, readStream);
-                        } else if (ok) {
-                            /* We sent a chunk and it was not the last one, so let's resume reading.
-                             * Timeout is still disabled, so we can spend any amount of time waiting
-                             * for more chunks to send. */
-                            readStream.resume();
-                        }
+                    /* On failure the timeout will start */
+                    let [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
+                    if (done) {
+                        this.onAbortedOrFinishedResponse(res, readStream);
+                    } else if (ok) {
+                        /* We sent a chunk and it was not the last one, so let's resume reading.
+                         * Timeout is still disabled, so we can spend any amount of time waiting
+                         * for more chunks to send. */
+                        readStream.resume();
+                    }
 
-                        /* We always have to return true/false in onWritable.
-                         * If you did not send anything, return true for success. */
-                        return ok;
-                    });
-                }
-            })
+                    /* We always have to return true/false in onWritable.
+                     * If you did not send anything, return true for success. */
+                    return ok;
+                });
+            }
 
-        }).on('error', (e) => {
+        }).on('error', () => {
             /* Todo: handle errors of the stream, probably good to simply close the response */
-            this.render404();
-            logger.error(`Error reading file, ${e}`);
+            logger.error('Unhandled read error from Node.js, you need to handle this!');
         });
 
         /* If you plan to asyncronously respond later on, you MUST listen to onAborted BEFORE returning */
         res.onAborted(() => {
             this.onAbortedOrFinishedResponse(res, readStream);
         });
-
     }
 
-    pipeReadableStreamOverResponse(res: uws.HttpResponse, readableStream: ReadableStream<Uint8Array>) {
+    async pipeReadableStreamOverResponse(res: uws.HttpResponse, readableStream: ReadableStream<Uint8Array>) {
         const reader = readableStream.getReader();
-        const t = setInterval(async () => {
-            const { done, value } = await reader.read();
-            if (done) {
-                res.end();
-                clearInterval(t);
-                return;
-            } else if (value) {
+        const { done, value } = await reader.read();
+        if (done || res.aborted) {
+            res.aborted = true;
+            return;
+        } else if (value && !res.aborted) {
+            try {
                 const lastOffset = res.getWriteOffset();
 
                 const ab = this.uInt8ArrayToArrayBuffer(value);
@@ -322,9 +326,13 @@ export class Streamable extends AbstractRender {
                         return ok;
                     });
                 }
-                res.write(value as any);
+            } catch (e) {
+                logger.error(e);
+                res.end();
+                res.aborted = true;
+                return;
             }
-        }, 1)
+        }
 
     }
 }
@@ -418,7 +426,7 @@ export class RenderServer extends AbstractRender {
                 res.end(finalHtml);
             })
         } catch (e) {
-            console.error(e);
+            logger.error(e);
             return this.renderError({
                 error: 500
             });
@@ -549,6 +557,10 @@ export class RenderEvent extends AbstractRender {
     }
 
 }
+
+const isObjectEmpty = (objectName: Object) => {
+    return Object.keys(objectName).length === 0
+}
 export class RenderAPI extends Streamable {
     async render() {
         const { res, req, pathname: pageName, context, params: p } = this.options;
@@ -558,7 +570,6 @@ export class RenderAPI extends Streamable {
                 res.onAborted(() => {
                     res.aborted = true;
                 });
-
 
                 const method = req.getMethod().toLowerCase();
                 const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
@@ -586,10 +597,16 @@ export class RenderAPI extends Streamable {
                         params: () => {
                             const queries = queryParser(req.getQuery());
                             const params = pageName.includes(":") ? this.getParams() : undefined;
+
                             if (params && queries) {
                                 return { ...queries, ...(p || Object.fromEntries(params)) }
                             }
-                            return (params || p) ? (p || Object.fromEntries(params)) : queries ? { ...queries } : undefined;
+                            if (!isObjectEmpty(params || p)) {
+                                return { ...(p || Object.fromEntries(params)) }
+                            }
+                            if (!isObjectEmpty(queries)) {
+                                return { ...queries };
+                            }
                         },
                         headers: () => {
                             const headers = new Map<string, string>();
@@ -616,18 +633,73 @@ export class RenderAPI extends Streamable {
                         },
                         getCookie: (name: string) => (cookies).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
                         writeHeader: (key: string, value: string) => {
-                            res.writeHeader(key, value);
+                            if (!res.aborted)
+                                res.cork(() => {
+                                    res.writeHeader(key, value);
+                                })
                         },
                         status: (code: number) => {
-                            res.writeStatus(code.toString());
+                            if (!res.aborted)
+                                res.cork(() => {
+                                    res.writeStatus(code.toString());
+                                })
                         },
 
                         write: (data: string | Object) => {
-                            if (typeof data === "string") {
-                                res.write(data);
-                            } else {
-                                res.write(JSON.stringify(data));
+                            if (!res.aborted) {
+                                if (typeof data === "string") {
+                                    res.write(data);
+                                } else {
+                                    res.write(JSON.stringify(data));
+                                }
                             }
+                        },
+
+                        revalidate: async (pageName: string) => {
+                            // TODO: support all data types
+                            const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", "data", this.options.directRender ? pageName : `${pageName}.data.js`);
+                            const dataModule = await import(filePath);
+                            const data = dataModule.data;
+
+                            const getData = async () => {
+                                const oldValue = null;
+                                if (typeof dataModule.data === "function") {
+                                    return await dataModule.data();
+                                }
+                                if (data.runner) {
+                                    return await data.runner(stop, null);
+                                } else if (data.source) {
+                                    const sourceLoader = data.source;
+                                    const file = join(process.cwd(), sourceLoader.file)
+                                    const loader = sourceLoader.parser || ((data: string) => JSON.parse(data))
+
+                                    const dataFile = readFileSync(file, "utf-8");
+
+                                    const futureData = loader(dataFile)
+
+                                    let currentValue = null;
+                                    if (futureData instanceof Promise || typeof futureData.then === "function") {
+                                        currentValue = await futureData
+                                    } else {
+                                        currentValue = futureData
+                                    }
+
+                                    if (sourceLoader.onChangeData) {
+                                        sourceLoader.onChangeData(stop, oldValue, currentValue);
+                                    }
+
+                                    return currentValue;
+                                }
+                            }
+
+                            const newValue = await getData();
+
+                            const serialize = new Serializer(newValue);
+                            writeFileSync(
+                                join(AbstractRender.PWD, ".ssr", "output", "server", "data", `${pageName}.data.json`),
+                                serialize.toJSON()
+                            )
+
                         },
                         context
 
@@ -635,9 +707,10 @@ export class RenderAPI extends Streamable {
                     const data = (dataCall?.then) ? await dataCall : dataCall;
 
                     if (typeof data === "undefined" || !data) {
-                        res.end();
-
-                        return onAborted()
+                        if (!res.aborted) {
+                            res.end();
+                            return onAborted()
+                        }
                     } else if (data.stream && data.length) {
                         if (!data.length) {
                             logger.error("Error reading stream");
@@ -678,44 +751,52 @@ export class RenderAPI extends Streamable {
 
                         return;
                     } else if (data instanceof Response) {
-                        const clonedData: Response = data;
+                        if (!res.aborted) {
+                            res.cork(() => {
+                                const clonedData: Response = data;
 
-                        clonedData.headers.forEach((value, key) => {
-                            res.writeHeader(key, value);
-                        });
+                                clonedData.headers.forEach((value, key) => {
+                                    res.writeHeader(key, value);
+                                });
 
-                        if (clonedData.status) {
-                            if (clonedData.statusText) {
-                                res.writeStatus(`${clonedData.status} ${clonedData.statusText}`);
-                            } else {
-                                res.writeStatus(clonedData.status.toString());
-                            }
+                                if (clonedData.status) {
+                                    if (clonedData.statusText) {
+                                        res.writeStatus(`${clonedData.status} ${clonedData.statusText}`);
+                                    } else {
+                                        res.writeStatus(clonedData.status.toString());
+                                    }
+                                }
+
+                                const resBody = clonedData.body;
+                                if (resBody) {
+                                    if (typeof resBody === "string") {
+                                        res.write(resBody);
+                                    } else if ("getReader" in resBody) {
+                                        return this.pipeReadableStreamOverResponse(res, resBody).then(() => onAborted());
+                                    } else if (Buffer.isBuffer(resBody)) {
+                                        const buf: Buffer = resBody;
+                                        res.tryEnd(buf, buf.byteLength);
+                                        return onAborted();
+                                    } else {
+                                        res.end(JSON.stringify(resBody));
+                                        return onAborted();
+                                    }
+                                } else {
+                                    res.end();
+                                    return onAborted();
+                                }
+                            })
+                            return onAborted();
                         }
-
-                        const resBody = clonedData.body;
-                        if (resBody) {
-                            console.log(resBody.toString());
-                            if (typeof resBody === "string") {
-                                res.write(resBody);
-                            } else if ("getReader" in resBody) {
-                                this.pipeReadableStreamOverResponse(res, resBody);
-                                return onAborted();
-                            } else if (Buffer.isBuffer(resBody)) {
-                                const buf: Buffer = resBody;
-                                res.tryEnd(buf, buf.byteLength);
-                                return onAborted();
-
-                            }
-                        }
-                        return onAborted();
 
                     } else {
                         if (!res.aborted) {
                             res.cork(() => {
                                 res.writeHeader("Content-Type", "application/json");
                                 res.end(JSON.stringify(data));
-                                onAborted()
                             })
+
+                            return onAborted()
                         }
                     }
                 } else {
@@ -797,13 +878,12 @@ export class RenderGraphQL extends Streamable {
 
                 if (!gqlModule) {
                     return this.renderError({
-                        error: 500
+                        error: 500,
+                        err: new Error("No GraphQL module found")
                     })
                 }
-                res.onAborted(() => {
-                    res.aborted = true;
-                });
-                const data = await new Promise((resolve, reject) => {
+
+                const dataPromise = new Promise((resolve, reject) => {
                     this.readJson(res, (obj: Buffer | string) => {
                         resolve(obj);
                     }, () => {
@@ -816,13 +896,19 @@ export class RenderGraphQL extends Streamable {
 
                 if (!gqlObject.schema) {
                     return this.renderError({
-                        error: 500
+                        error: 500,
+                        err: new Error("No GraphQL schema found")
                     })
                 }
 
                 try {
+                    res.onAborted(() => {
+                        res.aborted = true;
+                    });
                     const { graphql, buildSchema } = await import("graphql");
                     const schema = gqlObject.schema;
+
+                    const data = await Promise.resolve(dataPromise);
                     const result = await graphql({
                         schema: typeof schema === "string" ? buildSchema(schema) : await getAsyncValue(schema),
                         source: data.query,
@@ -831,90 +917,87 @@ export class RenderGraphQL extends Streamable {
                         contextValue: gqlObject?.context,
                         operationName: data?.operationName
                     })
-                    res.writeHeader("Content-Type", "application/json");
-
-                    return res.end(JSON.stringify(result));
+                    return res.cork(() => {
+                        res.writeHeader("Content-Type", "application/json");
+                        return res.end(JSON.stringify(result));
+                    })
                 } catch (e) {
-                    logger.error(e);
-
-                    res.writeStatus("500")
-                    res.writeHeader("Content-Type", "application/json");
-
-                    return res.end(JSON.stringify(e));
-                }
-            } else {
-                if (isDev) {
-                    const thisPage = req.getUrl()
-
-                    const html = `
-                    <!DOCTYPE html>
-                    <html>
-                    
-                    <head>
-                      <meta charset=utf-8/>
-                      <meta name="viewport" content="user-scalable=no, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, minimal-ui">
-                      <title>GraphQL Playground</title>
-                      <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/graphql-playground-react/build/static/css/index.css" />
-                      <link rel="shortcut icon" href="//cdn.jsdelivr.net/npm/graphql-playground-react/build/favicon.png" />
-                      <script src="//cdn.jsdelivr.net/npm/graphql-playground-react/build/static/js/middleware.js"></script>
-                    </head>
-                    
-                    <body>
-                      <div id="root">
-                        <style>
-                          body {
-                            background-color: rgb(23, 42, 58);
-                            font-family: Open Sans, sans-serif;
-                            height: 90vh;
-                          }
-                    
-                          #root {
-                            height: 100%;
-                            width: 100%;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                          }
-                    
-                          .loading {
-                            font-size: 32px;
-                            font-weight: 200;
-                            color: rgba(255, 255, 255, .6);
-                            margin-left: 20px;
-                          }
-                    
-                          img {
-                            width: 78px;
-                            height: 78px;
-                          }
-                    
-                          .title {
-                            font-weight: 400;
-                          }
-                        </style>
-                        <img src='//cdn.jsdelivr.net/npm/graphql-playground-react/build/logo.png' alt=''>
-                        <div class="loading"> Loading
-                          <span class="title">GraphQL Playground</span>
-                        </div>
-                      </div>
-                      <script>window.addEventListener('load', function (event) {
-                          GraphQLPlayground.init(document.getElementById('root'), {
-                            endpoint: window.location.origin + '${thisPage}',
-                          })
-                        })
-                     </script>
-                    </body>
-                    
-                    </html>
-                    `
-                    res.writeHeader("Content-Type", "text/html");
-                    return res.end(html.replace(/\n|\t/g, ' '));
-                } else {
+                    console.error(e);
                     return this.renderError({
-                        error: 405,
+                        error: 500,
+                        err: e as any
                     })
                 }
+            } else if (isDev) {
+                const thisPage = req.getUrl()
 
+                const html = `
+                <!DOCTYPE html>
+                <html>
+                
+                <head>
+                  <meta charset=utf-8/>
+                  <meta name="viewport" content="user-scalable=no, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, minimal-ui">
+                  <title>GraphQL Playground</title>
+                  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/graphql-playground-react/build/static/css/index.css" />
+                  <link rel="shortcut icon" href="//cdn.jsdelivr.net/npm/graphql-playground-react/build/favicon.png" />
+                  <script src="//cdn.jsdelivr.net/npm/graphql-playground-react/build/static/js/middleware.js"></script>
+                </head>
+                
+                <body>
+                  <div id="root">
+                    <style>
+                      body {
+                        background-color: rgb(23, 42, 58);
+                        font-family: Open Sans, sans-serif;
+                        height: 90vh;
+                      }
+                
+                      #root {
+                        height: 100%;
+                        width: 100%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                      }
+                
+                      .loading {
+                        font-size: 32px;
+                        font-weight: 200;
+                        color: rgba(255, 255, 255, .6);
+                        margin-left: 20px;
+                      }
+                
+                      img {
+                        width: 78px;
+                        height: 78px;
+                      }
+                
+                      .title {
+                        font-weight: 400;
+                      }
+                    </style>
+                    <img src='//cdn.jsdelivr.net/npm/graphql-playground-react/build/logo.png' alt=''>
+                    <div class="loading"> Loading
+                      <span class="title">GraphQL Playground</span>
+                    </div>
+                  </div>
+                  <script>window.addEventListener('load', function (event) {
+                      GraphQLPlayground.init(document.getElementById('root'), {
+                        endpoint: window.location.origin + '${thisPage}',
+                      })
+                    })
+                 </script>
+                </body>
+                
+                </html>
+                `
+                res.writeHeader("Content-Type", "text/html");
+                return res.end(html.replace(/\n|\t/g, ' '));
+            } else {
+                return this.renderError({
+                    error: 405,
+                })
             }
 
         } catch (e) {
@@ -989,8 +1072,10 @@ export class renderDefault extends AbstractRender {
         logger.debug("RenderAPI.renderDev");
     }
 }
+
+
 export class RenderStatic extends Streamable {
-    static MIME_TYPE = {
+    static MIME_TYPE: Record<string, string> = {
         "js": "text/javascript",
         "css": "text/css",
         "html": "text/html",
@@ -1017,67 +1102,85 @@ export class RenderStatic extends Streamable {
         "rar": "application/x-rar-compressed",
         "txt": "text/plain",
     }
+
     render() {
         const { res, req, buildReport, isDev } = this.options;
-        res.cork(() => {
-            const path = req.getUrl();
-            const exts = path.split(".");
-            const ext = exts[exts.length - 1];
-            const isDataJs = ext === "js" && exts[exts.length - 2] === "data";
+        const path = req.getUrl();
+        const exts = path.split(".");
+        const ext = exts[exts.length - 1];
+        const isDataJs = ext === "js" && exts[exts.length - 2] === "data";
 
-            if (isDataJs) {
-                const subPath = exts[0]
-                const pageName = subPath;
-                if (buildReport[pageName]) {
-                    return new RenderData({ ...this.options, directRender: true });
-                } else {
-                    return this.render404()
-                }
+        if (isDataJs) {
+            const subPath = exts[0]
+            const pageName = subPath;
+            if (buildReport[pageName]) {
+                return new RenderData({ ...this.options, directRender: true });
+            } else {
+                return this.render404()
             }
+        } else if (Object.keys(RenderStatic.MIME_TYPE).includes(ext)) {
+            const mime = RenderStatic.MIME_TYPE[ext];
+            if (mime) {
+                // res.writeHeader("Content-Type", mime);
+                // let compressed = false;
+                // if (['js', 'css'].includes(ext)) {
+                //     res.writeHeader("Content-Encoding", "gzip");
+                //     compressed = true;
+                // }
+                // const filePath = join(AbstractRender.PWD, ".ssr", "output", "static", path);
 
-            else if (Object.keys(RenderStatic.MIME_TYPE).includes(ext)) {
-                //@ts-ignore
-                const mime = RenderStatic.MIME_TYPE[ext];
-                if (mime) {
-                    res.writeHeader("Content-Type", mime);
-                    let compressed = false;
-                    if (['js', 'css'].includes(ext)) {
-                        res.writeHeader("Content-Encoding", "gzip");
-                        compressed = true;
+                // if (compressed) {
+                //     if (!isDev)
+                //         res.writeHeader("Cache-Control", "public, max-age=31536000, immutable");
+
+                //     const text = readFileSync(filePath, 'utf-8');
+
+                //     res.cork(() => {
+                //         res.onAborted(() => {
+                //             res.aborted = true;
+                //         })
+                //         gzip(text, function (_, result) {
+                //             res.end(result);
+                //         })
+                //         return;
+                //     })
+                // } else {
+                //     res.cork(() => {
+                //         const stream = createReadStream(filePath)
+                //         const size = stream.bytesRead;
+                //         return this.pipeStreamOverResponse(res, stream, size);
+                //     });
+                // }
+
+                res.onAborted(() => {
+                    res.aborted = true;
+                });
+
+                const filePath = join(AbstractRender.PWD, ".ssr", "output", "static", path);
+
+                access(filePath, (err) => {
+                    if (err) {
+                        return this.render404();
                     }
-                    const filePath = join(AbstractRender.PWD, ".ssr", "output", "static", path);
-
-
-                    if (compressed) {
-                        if (!isDev)
-                            res.writeHeader("Cache-Control", "public, max-age=31536000, immutable");
-
-                        const text = readFileSync(filePath, 'utf-8');
-
-                        res.cork(() => {
-                            res.onAborted(() => {
-                                res.aborted = true;
+                    readFile(filePath, (err, data) => {
+                        if (err) {
+                            return this.render404();
+                        } else if (!res.aborted) {
+                            res.cork(() => {
+                                res.writeHeader("Content-Type", mime);
+                                return res.end(data);
                             })
-                            gzip(text, function (_, result) {
-                                res.end(result);
-                            })
-                            return;
-                        })
-                    } else {
-                        res.cork(() => {
-                            const stream = createReadStream(filePath)
-                            const size = stream.bytesRead;
-                            return this.pipeStreamOverResponse(res, stream, size, compressed);
-                        });
-                    }
+                        }
 
-                } else {
-                    return this.render404();
-                }
+                    })
+                })
+
             } else {
                 return this.render404();
             }
-        })
+        } else {
+            return this.render404();
+        }
     }
 
     renderDev() {
@@ -1108,12 +1211,13 @@ export class RenderData extends AbstractRender {
             })
         });
 
-        res.cork(() => {
-            res.writeHeader("Content-Type", "application/javascript");
-            res.writeHeader("Content-Encoding", "gzip");
-            res.end(r);
-        })
-
+        if (!res.aborted) {
+            res.cork(() => {
+                res.writeHeader("Content-Type", "application/javascript");
+                res.writeHeader("Content-Encoding", "gzip");
+                res.end(r);
+            })
+        }
         const dataModule = await this.getDataModule(pageName);
         const data = dataModule.data;
 
@@ -1213,12 +1317,25 @@ export class RenderData extends AbstractRender {
 export class RenderPage extends Streamable {
     render(): void {
         const { pathname: filePath, res } = this.options;
-        res.cork(() => {
-            res.writeHeader("Content-Type", "text/html; charset=utf-8");
-            const stream = createReadStream(filePath);
-            const size = statSync(filePath).size;
-            this.pipeStreamOverResponse(res, stream, size);
+        res.onAborted(() => {
+            res.aborted = true;
         });
+        access(filePath, (err) => {
+            if (err) {
+                return this.render404();
+            }
+            readFile(filePath, (err, data) => {
+                if (err) {
+                    return this.render404();
+                } else if (!res.aborted) {
+                    res.cork(() => {
+                        res.writeHeader("Content-Type", "text/html; charset=utf-8");
+                        return res.end(data);
+                    })
+                }
+
+            })
+        })
     }
 
     renderDev() {

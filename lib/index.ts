@@ -557,7 +557,8 @@ export default async function server(env = "production") {
     }
 
 
-    x.forEach((pageServerName) => {
+
+    for (const pageServerName of x) {
         const filePath = join(pwd, ".ssr", "output", "static", `${pageServerName}.html`)
         const page = pageServerName.replace("/index", "/");
 
@@ -678,6 +679,7 @@ export default async function server(env = "production") {
                     req, res, () => new RenderAPI(getRenderProps(res, req, pageServerName))
                 )
             )
+
         } else if (isPage) {
             if (!pageName.includes("/_errors/")) {
                 paths.set(pageName, {
@@ -809,26 +811,22 @@ export default async function server(env = "production") {
             });
         }
 
-    })
+    }
 
     app.get("/*", async (res, req) => {
-        const ps = x.filter((x) => x.includes(":"))
-        if (ps.length < 0) {
-            const path = req.getUrl();
-            const pageName = ps.find((x) => pathToRegexp(x).test(path));
+        const path = req.getUrl();
+        const pageName = x.find((x) => pathToRegexp(x).test(path));
 
-            if (pageName) {
-                const page = paths.get(pageName);
-                if (page) {
-                    const regexpMatcher = match(pageName);
-                    const regParams = regexpMatcher(path);
-                    let params: object | undefined = undefined
-                    if (regParams) {
-                        params = regParams.params
-                    }
-                    return middlewareFn(req, res, () => new page.clazz(getRenderProps(res, req, page.path, params)));
+        if (pageName) {
+            const page = paths.get(pageName);
+            if (page) {
+                const regexpMatcher = match(pageName);
+                const regParams = regexpMatcher(path);
+                let params: object | undefined = undefined
+                if (regParams) {
+                    params = regParams.params
                 }
-                return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
+                return middlewareFn(req, res, () => new page.clazz(getRenderProps(res, req, page.path, params)));
             }
             return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
         } else {
@@ -836,6 +834,8 @@ export default async function server(env = "production") {
         }
         //return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
     })
+
+
 
     function loadWSEndpoints() {
         const wsPath = join(pwd, ".ssr", "output", "server", "ws");

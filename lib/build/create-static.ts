@@ -158,7 +158,7 @@ async function saveDataIntoJson({
   );
   const serialize = new Serializer(data);
 
-  const payload = await Promise.resolve(serialize.toJSON());
+  const payload = (serialize.toJSON());
 
   writeFileSync(filePath, payload);
 }
@@ -179,6 +179,40 @@ type BundleVuePageOptions = {
   outdir: string;
   tsconfig?: { file: string; tsConfigRaw: string };
 };
+
+
+async function getDataFromModule(dataModule: any) {
+  if (typeof dataModule.data === "function") {
+    return (await dataModule.data());
+  } else {
+    const keys = Object.keys(dataModule.data);
+    if (keys.includes("runner")) {
+      return await dataModule.data.runner();
+    } else if (keys.includes("source")) {
+      const sourceLoader = dataModule.data.source as {
+        file: string;
+        parser?: (data: any) => Promise<any> | any;
+      };
+
+      const file = join(process.cwd(), sourceLoader.file);
+      const loader =
+        sourceLoader.parser || ((data: string) => JSON.parse(data));
+
+      const dataFile = readFileSync(file, "utf-8");
+
+      const futureData = loader(dataFile);
+
+      if (
+        futureData instanceof Promise ||
+        typeof futureData.then === "function"
+      ) {
+        return await futureData;
+      } else {
+        return futureData;
+      }
+    }
+  }
+}
 export async function createStaticVue({
   filePath,
   page,
@@ -193,42 +227,14 @@ export async function createStaticVue({
     filePath.replace(".vue", ".data.ts"),
     filePath.replace(".vue", ".data.ts"),
   ].find((file) => existsSync(file));
+
   if (dataFile) {
     await generateData(dataFile, page, tsconfig?.file);
     const dataModule = await import(join(process.cwd(), ".ssr/output/server/data", `${page}.data.js`))
 
     if (dataModule.data) {
       isData = true;
-      if (typeof dataModule.data === "function") {
-        data = dataModule.data();
-      } else {
-        const keys = Object.keys(dataModule.data);
-        if (keys.includes("runner")) {
-          data = await dataModule.data.runner();
-        } else if (keys.includes("source")) {
-          const sourceLoader = dataModule.data.source as {
-            file: string;
-            parser?: (data: any) => Promise<any> | any;
-          };
-
-          const file = join(process.cwd(), sourceLoader.file);
-          const loader =
-            sourceLoader.parser || ((data: string) => JSON.parse(data));
-
-          const dataFile = readFileSync(file, "utf-8");
-
-          const futureData = loader(dataFile);
-
-          if (
-            futureData instanceof Promise ||
-            typeof futureData.then === "function"
-          ) {
-            data = await futureData;
-          } else {
-            data = futureData;
-          }
-        }
-      }
+      data = await getDataFromModule(dataModule);
       await saveDataIntoJson({ data, pageName: page });
     }
   }
@@ -324,7 +330,7 @@ export async function createStaticFile(
 
     if (options?.data && Component.data) {
       if (typeof Component.data === "function") {
-        data = Component.data();
+        data = await Component.data();
       } else {
         const keys = Object.keys(Component.data);
         if (keys.includes("runner")) {
