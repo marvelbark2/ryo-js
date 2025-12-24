@@ -7,7 +7,7 @@ import {
   generateClientBundle,
   generateOfflineClientBundle,
 } from "./bundle-component.js";
-import { existsSync, read, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { render } from "preact-render-to-string";
 import { createElement, h } from "preact";
 import { build, analyzeMetafile } from "esbuild";
@@ -18,7 +18,7 @@ import { minify } from "html-minifier";
 import { generateFramework } from "./create-framework.js";
 import { csrf } from "../utils/security.js";
 import { getBuildVersion } from "../utils/build-utils.js";
-import { importFromStringSync } from "module-from-string";
+
 import bundleVuePage from "./bundle-vue.js";
 
 const projectPkg = getProjectPkg();
@@ -213,6 +213,7 @@ async function getDataFromModule(dataModule: any) {
     }
   }
 }
+
 export async function createStaticVue({
   filePath,
   page,

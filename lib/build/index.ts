@@ -22,11 +22,10 @@ import { generateServerScript } from "./create-server";
 import { generateSSRPages } from "./create-ssr";
 import { build as buildSync } from "esbuild";
 import { importFromStringSync } from "module-from-string";
-import { getProjectPkg, isEndsWith, loadConfig } from "../utils/global";
+import { getProjectPkg, isEndsWith } from "../utils/global";
 import RouteValidator from "./validators/RouteValidator";
 import logger from "../utils/logger";
 import type { RyoConfig as Config } from '../../types/index';
-import ignoreUnused from "./plugins/ignore-unused";
 import { getBuildVersion } from "../utils/build-utils";
 import { bundleVueComponent } from "./bundle-vue";
 
@@ -58,6 +57,9 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
             return await generateSSRPages({ outdir: outWSdir, pageName, path: page, tsConfig });
         }
         console.timeEnd(`🕧 Building: ${pageName}`);
+        if (Component.post) {
+            buildReport[`/${pageName}.data`] = "data+post";
+        }
         return await createStaticFile(Component, page, pageName, config.security?.csrf === true, tsConfig, { outdir, bundle: true, data: keys.includes("data") });
     } else {
         const [p] = pageName.split("@");

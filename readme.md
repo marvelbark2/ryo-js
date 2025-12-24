@@ -140,11 +140,13 @@ npm i ryo.js #or npm i ryo.js@github:marvelbark2/ryo-js
 - [ ] Preact Components
   - [X] Async static component
   - [X] Sync static component
-  - [X] Server Component
-  - [X] Server Component with hooks
+  - [ ] Server Component
+  - [ ] Server Component with hooks
+  - [ ] Post function in component (api post inside component)
   - [ ] Offline version
     - [X] Offline version local
     - [ ] Offline version global
+
 - [X] Api
   - [X] JSON api
   - [X] Readable stream api

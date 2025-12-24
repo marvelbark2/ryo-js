@@ -1,9 +1,9 @@
 import { join } from "path";
-import { BuildOptions, analyzeMetafile, build, context } from "esbuild";
+import { BuildOptions, analyzeMetafile, build } from "esbuild";
 import compress from "@luncheon/esbuild-plugin-gzip";
 import { cssModulesPlugin } from "@asn.aeb/esbuild-css-modules-plugin";
 import { existsSync } from "fs";
-import { getBuildVersion } from "../utils/build-utils";
+import { getBuildVersion, nodeBuiltins } from "../utils/build-utils";
 
 
 
@@ -151,7 +151,11 @@ export async function generateClientBundle({
         treeShaking: true,
         minify: true,
         loader: {
-            ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx", '.png': 'dataurl',
+            ".ts": "ts",
+            ".tsx": "tsx",
+            ".js": "js",
+            ".jsx": "jsx",
+            '.png': 'dataurl',
             '.svg': 'text',
             '.woff': 'dataurl',
             '.woff2': 'dataurl',
@@ -198,6 +202,7 @@ export async function generateClientBundle({
             tsconfig,
             publicPath: join(".ssr/output/static"),
             absWorkingDir: process.cwd(),
+            external: [...nodeBuiltins],
         });
 
         if (result.metafile) {
@@ -283,13 +288,6 @@ export async function generateOfflineClientBundle({
             publicPath: join(".ssr/output/static"),
             write: false
         });
-
-        // if (result.metafile) {
-        //     let text = await analyzeMetafile(result.metafile, {
-        //         verbose: true,
-        //     })
-        //     console.log(text)
-        // }
 
         return result;
 

@@ -395,7 +395,7 @@ export class RenderServer extends AbstractRender {
 
             const data = serverData.body;
 
-            const Element = h(App, {});
+            const Element = h(App, { data });
             //            const Parent = h(Wrapper, { Parent: ParentLayout, id: path }, Element);
 
             const html = render(Element);
@@ -558,7 +558,7 @@ export class RenderEvent extends AbstractRender {
 
 }
 
-const isObjectEmpty = (objectName: Object) => {
+const isObjectEmpty = (objectName: object) => {
     return Object.keys(objectName).length === 0
 }
 export class RenderAPI extends Streamable {
