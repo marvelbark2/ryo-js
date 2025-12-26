@@ -1,4 +1,9 @@
 declare module "RyoApi" {
+    type MapContext = Map<string, any>;
+    type Context = MapContext & {
+        emit(key: string, value: any): void;
+        subscribe(key: string, listener: (value: any) => void): () => void;
+    }
     export type GetApiPayload = {
         url: string;
         params: () => { [k: string]: (string | string[]) } | undefined;
@@ -8,7 +13,7 @@ declare module "RyoApi" {
         getCookies: () => { [k: string]: string }
         writeHeader: (key: string, value: string) => void
         status: (code: number) => void
-        context: Map<string, any>
+        context: Context;
     }
 
     export type ApiPayload = GetApiPayload & {
@@ -20,6 +25,6 @@ declare module "RyoApi" {
         params: { [k: string]: (string | string[]) } | undefined;
         headers: Map<string, string>;
         getCookie: (name: string) => string | undefined;
-        context: Map<string, any>
+        context: Context;
     }
 }

@@ -19,6 +19,7 @@ import { changePageToRoute, getAsyncValue, getMiddleware, getMiddlewareInitMode,
 
 import { pathToRegexp, match } from "path-to-regexp"
 import { isAuth, sessionPassword, csrf, globToRegex } from "./utils/security";
+import { Context } from "./utils/context";
 
 let uwsToken: uws.us_listen_socket | null;
 const requireCaches = new Set<string>()
@@ -26,7 +27,7 @@ const shouldRestart: string[] = [];
 
 const pwd = process.cwd();
 
-const globalContext: Map<string, any> = new Map();
+const globalContext: Context = new Context();
 
 interface ClassType<T extends AbstractRender> {
     new(args: RenderProps): T
@@ -339,16 +340,24 @@ export default async function server(env = "production") {
                     req,
                     res,
                     () => {
-                        const f = handleSubdomains(req, res, (req: any, res: any, next: () => void) => middleware(req, res, next))
+                        const f = handleSubdomains(req, res, (req: any, res: any, next: () => void) => middleware ? middleware(req, res, next) : next())
                         if (typeof f === "boolean" && f) {
-                            return middleware(req, res, next)
+                            if (middleware) {
+                                return middleware(req, res, next)
+                            } else {
+                                return next();
+                            }
                         }
                     }
                 )
             } else {
-                const f = handleSubdomains(req, res, (req: any, res: any, next: () => void) => middleware(req, res, next))
+                const f = handleSubdomains(req, res, (req: any, res: any, next: () => void) => middleware ? middleware(req, res, next) : next())
                 if (typeof f === "boolean" && f) {
-                    return middleware(req, res, next)
+                    if (middleware) {
+                        return middleware(req, res, next)
+                    } else {
+                        return next()
+                    }
                 }
                 return f;
             }
@@ -356,8 +365,10 @@ export default async function server(env = "production") {
         } else {
             if (isSecureContext && ryoConfig.security) {
                 return authFilter(req, res, next);
-            } else {
+            } else if (middleware) {
                 return middleware(req, res, next)
+            } else {
+                next()
             }
         }
     }
@@ -422,7 +433,8 @@ export default async function server(env = "production") {
         path: string,
         type: string
     }[] = [];
-    const x = Object.keys(buildReport)
+
+    const pathsByBuild = Object.keys(buildReport)
         .filter((p) => {
             const isDomain = p.startsWith("/_subdomains");
             if (isDomain) {
@@ -432,6 +444,14 @@ export default async function server(env = "production") {
                 });
             }
             return !isDomain;
+        })
+        .map(p => {
+            const routeNodes = p.split("/").filter(n => n.trim().length > 0);
+            if (routeNodes.length > 1 && routeNodes[routeNodes.length - 1] === "index") {
+                return "/" + routeNodes.slice(0, routeNodes.length - 1).join("/");
+            } else {
+                return p;
+            }
         })
         .sort((a, b) => {
             if (a === "/index") return -1;
@@ -558,7 +578,7 @@ export default async function server(env = "production") {
 
 
 
-    for (const pageServerName of x) {
+    for (const pageServerName of pathsByBuild) {
         const filePath = join(pwd, ".ssr", "output", "static", `${pageServerName}.html`)
         const page = pageServerName.replace("/index", "/");
 
@@ -813,28 +833,54 @@ export default async function server(env = "production") {
 
     }
 
-    app.get("/*", async (res, req) => {
-        const path = req.getUrl();
-        const pageName = x.find((x) => pathToRegexp(x).test(path));
+    // app.get("/*", async (res, req) => {
+    //     const path = req.getUrl();
+    //     const pageName = pathsByBuild.find((x) => pathToRegexp(x).test(path));
 
-        if (pageName) {
+    //     if (pageName) {
+    //         const page = paths.get(pageName);
+    //         if (page) {
+    //             const regexpMatcher = match(pageName);
+    //             const regParams = regexpMatcher(path);
+    //             let params: object | undefined = undefined
+    //             if (regParams) {
+    //                 params = regParams.params
+    //             }
+    //             return middlewareFn(req, res, () => new page.clazz(getRenderProps(res, req, page.path, params)));
+    //         }
+    //         return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
+    //     } else {
+    //         return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
+    //     }
+    // });
+
+    // Register each route individually
+    pathsByBuild.forEach((pageName) => {
+        app.get(pageName, async (res, req) => {
             const page = paths.get(pageName);
             if (page) {
                 const regexpMatcher = match(pageName);
-                const regParams = regexpMatcher(path);
-                let params: object | undefined = undefined
+                const regParams = regexpMatcher(req.getUrl());
+                let params: object | undefined = undefined;
                 if (regParams) {
-                    params = regParams.params
+                    params = regParams.params;
                 }
-                return middlewareFn(req, res, () => new page.clazz(getRenderProps(res, req, page.path, params)));
+                return middlewareFn(req, res, () =>
+                    new page.clazz(getRenderProps(res, req, page.path, params))
+                );
             }
-            return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
-        } else {
-            return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
-        }
-        //return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req)));
-    })
+            return middlewareFn(req, res, () =>
+                new RenderStatic(getRenderProps(res, req))
+            );
+        });
+    });
 
+    // Fallback catch-all for unmatched routes
+    app.get("/*", async (res, req) => {
+        return middlewareFn(req, res, () =>
+            new RenderStatic(getRenderProps(res, req))
+        );
+    });
 
 
     function loadWSEndpoints() {

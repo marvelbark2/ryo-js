@@ -58,7 +58,7 @@ const buildComponent = async (Component: any, page: string, pageName: string, ou
         }
         console.timeEnd(`🕧 Building: ${pageName}`);
         if (Component.post) {
-            buildReport[`/${pageName}.data`] = "data+post";
+            buildReport[`/${pageName}.data`] = "api";
         }
         return await createStaticFile(Component, page, pageName, config.security?.csrf === true, tsConfig, { outdir, bundle: true, data: keys.includes("data") });
     } else {

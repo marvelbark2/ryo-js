@@ -16,6 +16,7 @@ import EntryClient from '../entry';
 import { getAsyncValue, getMiddleware } from '../utils/global';
 import { parse as queryParser } from "querystring"
 import { getParts } from 'uWebSockets.js';
+import { Context } from '../utils/context';
 
 
 
@@ -32,7 +33,7 @@ export interface RenderProps {
     isDev: boolean;
     buildReport: any
     render?: boolean
-    context: Map<string, any>
+    context: Context
     buildId: string
     directRender?: boolean
     params?: any
@@ -48,7 +49,7 @@ export abstract class AbstractRender {
     static RequireCaches = new Set<string>();
     static CACHE_API_METHODS = new Map();
     static CACHE_BUNDLES = new Map();
-    static middlewareFn = null
+    static middlewareFn: any = null
 
     constructor(protected readonly options: RenderProps) {
         /**
@@ -118,6 +119,7 @@ export abstract class AbstractRender {
         if (AbstractRender.middlewareFn) return AbstractRender.middlewareFn;
         else {
             const mFn = getMiddleware()
+            if (!mFn) return null;
             AbstractRender.middlewareFn = mFn;
             return mFn;
         }
@@ -173,41 +175,48 @@ export abstract class AbstractRender {
         if (err) {
             console.error("Rendering the error: ", err);
         }
-        return middlewareFn(
-            req,
-            res,
-            () => {
-                try {
-                    res.cork(() => {
-                        const contentType = req.getHeader("accept");
-                        if (contentType.includes("text/html")) {
-                            const errRender = new RenderError({ ...this.options, error });
-                            errRender.render(() => {
-                                res.writeStatus(`${error} Error`);
-                                res.end(`${error} Error - page: ${pathname}`);
-                            });
-                        } else {
+
+        const next = () => {
+            try {
+                res.cork(() => {
+                    const contentType = req.getHeader("accept");
+                    if (contentType.includes("text/html")) {
+                        const errRender = new RenderError({ ...this.options, error });
+                        errRender.render(() => {
                             res.writeStatus(`${error} Error`);
                             res.end(`${error} Error - page: ${pathname}`);
-                        }
-                    })
-                } catch (error) {
-                    res.cork(() => {
-                        try {
-                            res.writeStatus(`${error} Error`);
-                            res.end(`${error} Error - page: ${pathname}`);
-                        } catch (e) {
-                            logger.error("Error in error handler", error, e);
-                        }
-                    })
-                }
-            },
-            {
-                errorCode: error,
-                pathname,
-                error: err
+                        });
+                    } else {
+                        res.writeStatus(`${error} Error`);
+                        res.end(`${error} Error - page: ${pathname}`);
+                    }
+                })
+            } catch (error) {
+                res.cork(() => {
+                    try {
+                        res.writeStatus(`${error} Error`);
+                        res.end(`${error} Error - page: ${pathname}`);
+                    } catch (e) {
+                        logger.error("Error in error handler", error, e);
+                    }
+                })
             }
-        )
+        }
+
+        if (middlewareFn)
+            return middlewareFn(
+                req,
+                res,
+                next,
+                {
+                    errorCode: error,
+                    pathname,
+                    error: err
+                }
+            );
+        else {
+            next();
+        }
     }
 }
 
@@ -251,7 +260,7 @@ export class Streamable extends AbstractRender {
             let lastOffset = res.getWriteOffset();
 
             /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
-            let [ok, done] = res.tryEnd(ab, totalSize);
+            let [ok, done] = res.tryEnd(ab as ArrayBuffer, totalSize);
 
             /* Did we successfully send last chunk? */
             if (done) {
@@ -309,7 +318,7 @@ export class Streamable extends AbstractRender {
                 const ab = this.uInt8ArrayToArrayBuffer(value);
                 const totalSize = value.byteLength
                 /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
-                const [ok] = res.tryEnd(ab, value.byteLength);
+                const [ok] = res.tryEnd(ab as ArrayBuffer, value.byteLength);
 
                 if (!ok) {
                     /* If we could not send this chunk, pause */
@@ -356,8 +365,8 @@ export class RenderServer extends AbstractRender {
 
             const reqObj: any = req;
 
-            reqObj.getBody = async () => await new Promise((resolve, reject) => {
-                res.onData((message, isLast) => {
+            reqObj.getBody = async () => await new Promise((resolve) => {
+                res.onData((message) => {
                     // TODO: is content type is json then parse or then check other
                     resolve(message);
                 });
@@ -368,8 +377,7 @@ export class RenderServer extends AbstractRender {
                 params: this.getParams()
             });
 
-            const Wrapper = existsSync(join(process.cwd(), "entry.jsx")) ? require(join(process.cwd(), "entry.jsx")).default : EntryClient;
-            const ParentLayout = component.Parent || Wrapper;
+            const _Wrapper = existsSync(join(process.cwd(), "entry.jsx")) ? require(join(process.cwd(), "entry.jsx")).default : EntryClient;
 
             const App = component.default;
 
@@ -645,7 +653,7 @@ export class RenderAPI extends Streamable {
                                 })
                         },
 
-                        write: (data: string | Object) => {
+                        write: (data: string | object) => {
                             if (!res.aborted) {
                                 if (typeof data === "string") {
                                     res.write(data);
@@ -775,7 +783,7 @@ export class RenderAPI extends Streamable {
                                         return this.pipeReadableStreamOverResponse(res, resBody).then(() => onAborted());
                                     } else if (Buffer.isBuffer(resBody)) {
                                         const buf: Buffer = resBody;
-                                        res.tryEnd(buf, buf.byteLength);
+                                        res.tryEnd(buf as any, buf.byteLength);
                                         return onAborted();
                                     } else {
                                         res.end(JSON.stringify(resBody));
@@ -836,7 +844,7 @@ export class RenderAPI extends Streamable {
     }
 
     static readJson(contextType: string, res: uws.HttpResponse, cb: any, err: any) {
-        let buffer: Buffer = Buffer.from('');
+        let buffer: any = Buffer.from('');
         res.onData((ab, isLast) => {
             const chunk = Buffer.from(ab);
             buffer = Buffer.concat([buffer, chunk]);
@@ -844,13 +852,13 @@ export class RenderAPI extends Streamable {
                 if (buffer.length === 0) {
                     cb(undefined);
                 } else if (contextType.includes("multipart/form-data")) {
-                    const data = getParts(buffer, contextType);
+                    const data = getParts(buffer as any, contextType);
                     cb(data);
                 } else if (contextType.includes("application/json")) {
                     try {
                         const json = JSON.parse(buffer.toString());
                         cb(json);
-                    } catch (e) {
+                    } catch {
                         cb(buffer);
                     }
                 } else if (contextType.includes("application/x-www-form-urlencoded")) {
@@ -884,11 +892,11 @@ export class RenderGraphQL extends Streamable {
                 }
 
                 const dataPromise = new Promise((resolve, reject) => {
+                    res.onAborted(() => {
+                        reject('Invalid JSON or no data at all!');
+                    });
                     this.readJson(res, (obj: Buffer | string) => {
                         resolve(obj);
-                    }, () => {
-                        /* Request was prematurely aborted or invalid or missing, stop reading */
-                        reject('Invalid JSON or no data at all!');
                     })
                 }) as any
 
@@ -1018,8 +1026,8 @@ export class RenderGraphQL extends Streamable {
         }
     }
 
-    readJson(res: uws.HttpResponse, cb: any, err: any) {
-        let buffer: Buffer | null = null;
+    readJson(res: uws.HttpResponse, cb: any) {
+        let buffer: any = null;
         let bytes = 0;
         /* Register data cb */
         res.onData((ab, isLast) => {
@@ -1035,7 +1043,7 @@ export class RenderGraphQL extends Streamable {
                 if (buffer) {
                     try {
                         json = JSON.parse(Buffer.concat([buffer, chunk]) as any);
-                    } catch (e) {
+                    } catch {
                         /* res.close calls onAborted */
                         cb(Buffer.concat([buffer, chunk]))
                         return;
@@ -1044,7 +1052,7 @@ export class RenderGraphQL extends Streamable {
                 } else {
                     try {
                         json = JSON.parse(chunk as any);
-                    } catch (e) {
+                    } catch {
                         /* res.close calls onAborted */
                         cb(chunk)
                         return;
@@ -1053,9 +1061,9 @@ export class RenderGraphQL extends Streamable {
                 }
             } else {
                 if (buffer) {
-                    buffer = Buffer.concat([buffer, chunk]);
+                    buffer = Buffer.concat([buffer, chunk] as any);
                 } else {
-                    buffer = Buffer.concat([chunk]);
+                    buffer = Buffer.concat([chunk as any]);
                 }
             }
         });
@@ -1104,7 +1112,7 @@ export class RenderStatic extends Streamable {
     }
 
     render() {
-        const { res, req, buildReport, isDev } = this.options;
+        const { res, req, buildReport } = this.options;
         const path = req.getUrl();
         const exts = path.split(".");
         const ext = exts[exts.length - 1];
@@ -1168,7 +1176,7 @@ export class RenderStatic extends Streamable {
                         } else if (!res.aborted) {
                             res.cork(() => {
                                 res.writeHeader("Content-Type", mime);
-                                return res.end(data);
+                                return res.end(data as any);
                             })
                         }
 
@@ -1215,7 +1223,7 @@ export class RenderData extends AbstractRender {
             res.cork(() => {
                 res.writeHeader("Content-Type", "application/javascript");
                 res.writeHeader("Content-Encoding", "gzip");
-                res.end(r);
+                res.end(r as any);
             })
         }
         const dataModule = await this.getDataModule(pageName);
@@ -1330,7 +1338,7 @@ export class RenderPage extends Streamable {
                 } else if (!res.aborted) {
                     res.cork(() => {
                         res.writeHeader("Content-Type", "text/html; charset=utf-8");
-                        return res.end(data);
+                        return res.end(data as any);
                     })
                 }
 

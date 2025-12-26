@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.63",
+  "version": "0.0.0-meme.70",
   "description": "Ryo-js is a fullstack framework for building universal web applications with preact and graphql.",
   "sideEffects": false,
   "scripts": {
@@ -10,7 +10,8 @@
     "build:es2020": "tsc --module es2020 --target es2020 --outDir dist/es2020",
     "build:esm": "tsc --module es2020 --target es5 --outDir dist/esm",
     "build:cjs": "tsc --module commonjs --target es5 --outDir dist/cjs --isolatedModules true --declaration false",
-    "type-check": "tsc"
+    "prepublishOnly": "npm run build:cjs",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "preact",
@@ -52,7 +53,7 @@
     "@types/html-minifier": "4.0.5",
     "@types/node": "^20.11.19",
     "@types/node-fetch": "^2.6.11",
-    "esbuild": "^0.20.0",
+    "esbuild": "^0.27.2",
     "typescript": "^5.3.3"
   },
   "dependencies": {
@@ -72,7 +73,7 @@
     "node-fetch": "^2.6.7",
     "path-to-regexp": "6.2.1",
     "preact-render-to-string": "6.3.1",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.42.0",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.56.0",
     "vue": "3.4.19",
     "winston": "3.11.0"
   },

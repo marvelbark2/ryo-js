@@ -77,13 +77,15 @@ export function getMiddlewareModule() {
     return middlewareInitMode;
 
 }
-export function getMiddleware() {
+
+type MiddlewareFunction = (req: any, res: any, next: () => void, err?: any) => void;
+export function getMiddleware(): MiddlewareFunction | null {
     const middleware = getMiddlewareModule();
 
     if (middleware && middleware.default) {
         return middleware.default;
     } else {
-        return (_req: any, _res: any, next: any) => next();
+        return null;
     }
 }
 
