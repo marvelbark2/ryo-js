@@ -1,6 +1,4 @@
-//@ts-ignore
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'preact/hooks';
 
 export default function Router() {
    const [state, setState] = useState({

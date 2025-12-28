@@ -4,14 +4,23 @@
   "description": "Ryo-js is a fullstack framework for building universal web applications with preact and graphql.",
   "sideEffects": false,
   "scripts": {
-    "start": "node lib/index.module.js",
+    "start:test": "cd tests/fixtures && npm run dev",
     "build:app": "node ./lib/build/index.mjs",
     "build": "npm run build:es2020 && npm run build:esm && npm run build:cjs",
     "build:es2020": "tsc --module es2020 --target es2020 --outDir dist/es2020",
     "build:esm": "tsc --module es2020 --target es5 --outDir dist/esm",
     "build:cjs": "tsc --module commonjs --target es5 --outDir dist/cjs --isolatedModules true --declaration false",
     "prepublishOnly": "npm run build:cjs",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:headed": "playwright test --headed",
+    "test:all": "npm run test:run && npm run test:e2e",
+    "ci": "npm run type-check && npm run test:all"
   },
   "keywords": [
     "preact",
@@ -49,12 +58,14 @@
   },
   "devDependencies": {
     "@chialab/esbuild-plugin-postcss": "^0.18.0",
+    "@playwright/test": "^1.57.0",
     "@types/babel__register": "^7.17.3",
     "@types/html-minifier": "4.0.5",
     "@types/node": "^20.11.19",
     "@types/node-fetch": "^2.6.11",
-    "esbuild": "^0.27.2",
-    "typescript": "^5.3.3"
+    "jsdom": "^27.3.0",
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.16"
   },
   "dependencies": {
     "@asn.aeb/esbuild-css-modules-plugin": "0.1.9",
@@ -65,6 +76,7 @@
     "@luncheon/esbuild-plugin-gzip": "^0.1.0",
     "babel-preset-preact": "^2.0.0",
     "csrf": "3.1.0",
+    "esbuild": "^0.27.2",
     "esbuild-plugin-vue3": "0.4.2",
     "flamethrower-router": "^0.0.0-meme.12",
     "graphql": "16.8.1",

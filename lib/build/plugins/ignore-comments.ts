@@ -9,7 +9,7 @@ import * as t from '@babel/types';
 const removeExportedData = (sourceCode: string): string => {
     const ast = parseSync(sourceCode, { sourceType: 'module', });
 
-    traverse(ast, {
+    traverse(ast as any, {
         ExportDeclaration(p) {
             // Check if identifier is data then remove it
 

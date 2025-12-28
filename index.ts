@@ -35,7 +35,7 @@ const buildingScript = async (config: Config) => {
         const data = JSON.stringify(buildReport, null, 2);
         console.time("🕧 Building pages report");
         const jsonReportPath = join(process.cwd(), ".ssr/build-report.json")
-        writeFileSync(jsonReportPath, Buffer.from(data), { flag: "wx" });
+        writeFileSync(jsonReportPath, Buffer.from(data) as any, { flag: "wx" });
         console.timeEnd("🕧 Building pages report");
 
         console.time("🕧 Building offlines report");
@@ -43,7 +43,7 @@ const buildingScript = async (config: Config) => {
         OFFLINES_PAGES.forEach((v) => offlineReportArr.push(v));
         const offlineReport = JSON.stringify(offlineReportArr);
         const jsonReportOfflineReport = join(process.cwd(), ".ssr/build-offline-report.json")
-        writeFileSync(jsonReportOfflineReport, Buffer.from(offlineReport), { flag: "wx" });
+        writeFileSync(jsonReportOfflineReport, Buffer.from(offlineReport) as any, { flag: "wx" });
         console.timeEnd("🕧 Building offlines report");
 
         console.timeEnd("Build completed in");

@@ -424,7 +424,7 @@ export async function createStaticFile(
         </head>
         <body>
           <div id="root">
-            ${render(Parent)}
+            ${render(Parent as any)}
           </div>
           <script>
           ${jsCode}
@@ -486,7 +486,7 @@ export async function createStaticFile(
       <script src="/framework-system.js" defer></script>
     </head>
     <body>
-      <div id="root">${render(Parent)}</div>
+      <div id="root">${render(Parent as any)}</div>
       ${Component.data ? `<script src="/${pageName}.data.js" ></script>` : ""}
       <script src="/${pageNameWithBuildId}.bundle.js" defer></script>
       ${isOfflineSupported

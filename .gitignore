@@ -5,3 +5,13 @@ node_modules
 *.DS_Store
 .npmrc
 /dist
+HOW-TO-TESTS.md
+/notes
+.vscode
+
+# Test results
+coverage/
+playwright-report/
+test-results/
+tests/fixtures/.ssr/
+tests/fixtures/dist/

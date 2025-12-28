@@ -1,0 +1,8 @@
+{
+    "scripts": {
+        "dev": "ryo dev"
+    },
+    "dependencies": {
+        "ryo.js": "file:../.."
+    }
+}

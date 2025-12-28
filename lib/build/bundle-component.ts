@@ -73,13 +73,11 @@ const getWSDataReload = (data: any, pageName: string) => {
 const getHydrationScript = (filePath: string, pageName: string, data: any, parent: any, entryPath?: string) => {
     return `
     import "preact/debug";
-    import {h, hydrate} from "preact"
+    import {h, hydrate, render} from "preact"
     ${parent ? `import Component, { Parent } from "${filePath}"` :
             `import Component from "${filePath}";
         ${entryPath ? `import Parent from "${entryPath}"` : `const Parent = undefined;`
             }`}
-  
-    document.getElementById("${pageName}").innerHTML = "";
 
     ${optionHooks()}
   
@@ -96,15 +94,16 @@ const getHydrationScript = (filePath: string, pageName: string, data: any, paren
       }
       ${data ? getWSDataReload(data, pageName) : ''}
     } else {
+      // No data available - use render() instead of hydrate() since we need to clear and re-render
+      document.getElementById("${pageName}").innerHTML = "";
       if(Parent) {
           const Element = h(Component);
           const ParentElement = h(Parent, {id: '${pageName}', Parent: Parent, Child: Element}, Element);
-          hydrate(ParentElement, document.getElementById("root"));
+          render(ParentElement, document.getElementById("root"));
       } else {
           const Element = h(Component);
-          hydrate(Element, document.getElementById("${pageName}"));
+          render(Element, document.getElementById("${pageName}"));
       }
-     
     }
   
     ${fetchParams(pageName)}
@@ -147,9 +146,9 @@ export async function generateClientBundle({
     parent,
     bundleConstants = {
         bundle: true,
-        allowOverwrite: true,
+        allowOverwrite: false,
         treeShaking: true,
-        minify: true,
+        minify: false,
         loader: {
             ".ts": "ts",
             ".tsx": "tsx",

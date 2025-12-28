@@ -406,7 +406,7 @@ export class RenderServer extends AbstractRender {
             const Element = h(App, { data });
             //            const Parent = h(Wrapper, { Parent: ParentLayout, id: path }, Element);
 
-            const html = render(Element);
+            const html = render(Element as any);
 
             const head = serverData.head ? render(serverData.head || Fragment) : "";
 

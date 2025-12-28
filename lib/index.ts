@@ -670,7 +670,7 @@ export default async function server(env = "production") {
                 path: pageServerName,
             });
             app.get(pageName, (res, req) => {
-                return new RenderEvent(getRenderProps(res, req, pageServerName))
+                new RenderEvent(getRenderProps(res, req, pageServerName))
             })
         } else if (isQGL) {
             paths.set(pageName, {
@@ -678,13 +678,13 @@ export default async function server(env = "production") {
                 path: pageServerName,
             });
             app.get(pageName, (res, req) => {
-                return middlewareFn(
+                middlewareFn(
                     req, res, () => new RenderGraphQL(getRenderProps(res, req, pageServerName))
                 )
             });
 
             app.post(pageName, (res, req) => {
-                return middlewareFn(
+                middlewareFn(
                     req, res, () => new RenderGraphQL(getRenderProps(res, req, pageServerName))
                 )
             });
@@ -707,7 +707,7 @@ export default async function server(env = "production") {
                     path: filePath,
                 });
                 app.get(pageName, (res, req) => {
-                    return middlewareFn(
+                    middlewareFn(
                         req, res,
                         () => {
                             const path = req.getUrl();
@@ -722,7 +722,7 @@ export default async function server(env = "production") {
             }
 
             app.get(`${pageServerName}-${buildId}.bundle.js`, (res, req) => {
-                return middlewareFn(
+                middlewareFn(
                     req, res,
                     () => {
                         if (env === "production") {
@@ -738,7 +738,7 @@ export default async function server(env = "production") {
                 path: pageServerName,
             });
             app.get(`${pageServerName}.data.js`, (res, req) => {
-                return middlewareFn(req, res, () => {
+                middlewareFn(req, res, () => {
                     const path = req.getUrl();
                     const [pageName] = path.split(".");
                     if (buildReport[pageName]) {
@@ -750,7 +750,7 @@ export default async function server(env = "production") {
             })
         } else {
             app.get(pageName, (res, req) => {
-                return middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req, pageServerName)));
+                middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req, pageServerName)));
             })
         }
         app.get(`${pageName}/`, (res) => {
@@ -865,11 +865,12 @@ export default async function server(env = "production") {
                 if (regParams) {
                     params = regParams.params;
                 }
-                return middlewareFn(req, res, () =>
+                middlewareFn(req, res, () =>
                     new page.clazz(getRenderProps(res, req, page.path, params))
                 );
+                return;
             }
-            return middlewareFn(req, res, () =>
+            middlewareFn(req, res, () =>
                 new RenderStatic(getRenderProps(res, req))
             );
         });
@@ -877,7 +878,7 @@ export default async function server(env = "production") {
 
     // Fallback catch-all for unmatched routes
     app.get("/*", async (res, req) => {
-        return middlewareFn(req, res, () =>
+        middlewareFn(req, res, () =>
             new RenderStatic(getRenderProps(res, req))
         );
     });
@@ -921,7 +922,7 @@ export default async function server(env = "production") {
                     compression: uws.SHARED_COMPRESSOR,
                     maxPayloadLength: 16 * 1024 * 1024,
                     idleTimeout: 16,
-                    open: (ws: uws.WebSocket) => {
+                    open: (ws: uws.WebSocket<any>) => {
                         if (hasData) {
                             const unsub = ps.subscribe((msg, data) => {
                                 if (msg === `fetch-${page}` && data) {
