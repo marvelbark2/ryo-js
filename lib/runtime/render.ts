@@ -1,5 +1,3 @@
-import type uws from 'uWebSockets.js';
-
 import { join } from 'path';
 import { Fragment, h } from 'preact';
 import { render } from "preact-render-to-string";
@@ -18,6 +16,8 @@ import { parse as queryParser } from "querystring"
 import { getParts } from 'uWebSockets.js';
 import { Context } from '../utils/context';
 
+import type { ServerRequest, ServerResponse } from "../server/interfaces";
+
 
 
 /** TODOS:
@@ -27,8 +27,8 @@ import { Context } from '../utils/context';
  * MAYBE: Handle Dev env: Adding class instance to RenderProps to handle dev env: DevServer, DevClient, and DevLogger
  */
 export interface RenderProps {
-    res: uws.HttpResponse;
-    req: uws.HttpRequest;
+    res: ServerResponse;
+    req: ServerRequest;
     pathname: string;
     isDev: boolean;
     buildReport: any
@@ -180,7 +180,7 @@ export abstract class AbstractRender {
             try {
                 res.cork(() => {
                     const contentType = req.getHeader("accept");
-                    if (contentType.includes("text/html")) {
+                    if (contentType?.includes("text/html")) {
                         const errRender = new RenderError({ ...this.options, error });
                         errRender.render(() => {
                             res.writeStatus(`${error} Error`);
@@ -233,79 +233,48 @@ export class Streamable extends AbstractRender {
         return uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength);
     }
 
-
-
-    /* Either onAborted or simply finished request */
-    onAbortedOrFinishedResponse(res: uws.HttpResponse, readStream: Readable) {
-
+    onAbortedOrFinishedResponse(res: ServerResponse, readStream: Readable) {
         if (res.id === -1) {
             logger.log('error', "onAbortedOrFinishedResponse called twice for the same res!")
         } else {
             readStream.destroy();
         }
-
-        /* Mark this response already accounted for */
         res.id = -1;
     }
 
-    /* Helper function to pipe the ReadaleStream over an Http responses */
-    pipeStreamOverResponse(res: uws.HttpResponse, readStream: Readable, totalSize: number) {
-        /* Careful! If Node.js would emit error before the first res.tryEnd, res will hang and never time out */
-        /* For this demo, I skipped checking for Node.js errors, you are free to PR fixes to this example */
+    pipeStreamOverResponse(res: ServerResponse, readStream: Readable, totalSize: number) {
         readStream.on('data', (chunk) => {
-            /* We only take standard V8 units of data */
             const ab = this.toArrayBuffer(chunk);
-
-            /* Store where we are, globally, in our response */
             let lastOffset = res.getWriteOffset();
-
-            /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
             let [ok, done] = res.tryEnd(ab as ArrayBuffer, totalSize);
 
-            /* Did we successfully send last chunk? */
             if (done) {
                 this.onAbortedOrFinishedResponse(res, readStream);
             } else if (!ok) {
-                /* If we could not send this chunk, pause */
                 readStream.pause();
-
-                /* Save unsent chunk for when we can send it */
                 res.ab = ab;
                 res.abOffset = lastOffset;
 
-                /* Register async handlers for drainage */
                 res.onWritable((offset) => {
-                    /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
-
-                    /* On failure the timeout will start */
-                    let [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
+                    let [ok, done] = res.tryEnd(res.ab!.slice(offset - res.abOffset!), totalSize);
                     if (done) {
                         this.onAbortedOrFinishedResponse(res, readStream);
                     } else if (ok) {
-                        /* We sent a chunk and it was not the last one, so let's resume reading.
-                         * Timeout is still disabled, so we can spend any amount of time waiting
-                         * for more chunks to send. */
                         readStream.resume();
                     }
-
-                    /* We always have to return true/false in onWritable.
-                     * If you did not send anything, return true for success. */
                     return ok;
                 });
             }
-
         }).on('error', () => {
-            /* Todo: handle errors of the stream, probably good to simply close the response */
             logger.error('Unhandled read error from Node.js, you need to handle this!');
         });
 
-        /* If you plan to asyncronously respond later on, you MUST listen to onAborted BEFORE returning */
         res.onAborted(() => {
             this.onAbortedOrFinishedResponse(res, readStream);
         });
     }
 
-    async pipeReadableStreamOverResponse(res: uws.HttpResponse, readableStream: ReadableStream<Uint8Array>) {
+    async pipeReadableStreamOverResponse(res: ServerResponse, readableStream: ReadableStream<Uint8Array>) {
         const reader = readableStream.getReader();
         const { done, value } = await reader.read();
         if (done || res.aborted) {
@@ -314,24 +283,16 @@ export class Streamable extends AbstractRender {
         } else if (value && !res.aborted) {
             try {
                 const lastOffset = res.getWriteOffset();
-
                 const ab = this.uInt8ArrayToArrayBuffer(value);
-                const totalSize = value.byteLength
-                /* Streaming a chunk returns whether that chunk was sent, and if that chunk was last */
-                const [ok] = res.tryEnd(ab as ArrayBuffer, value.byteLength);
+                const totalSize = value.byteLength;
+                const [ok] = res.tryEnd(ab as ArrayBuffer, totalSize);
 
                 if (!ok) {
-                    /* If we could not send this chunk, pause */
-                    /* Save unsent chunk for when we can send it */
                     res.ab = ab;
                     res.abOffset = lastOffset;
 
-                    /* Register async handlers for drainage */
                     res.onWritable((offset) => {
-                        /* Here the timeout is off, we can spend as much time before calling tryEnd we want to */
-
-                        /* On failure the timeout will start */
-                        const [ok] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize);
+                        const [ok] = res.tryEnd(res.ab!.slice(offset - res.abOffset!), totalSize);
                         return ok;
                     });
                 }
@@ -342,7 +303,6 @@ export class Streamable extends AbstractRender {
                 return;
             }
         }
-
     }
 }
 
@@ -350,9 +310,9 @@ export class Streamable extends AbstractRender {
 export class RenderServer extends AbstractRender {
     async render() {
         const { res, pathname: path, req } = this.options;
-        res.onAborted(() => {
-            res.aborted = true;
-        });
+        // res.onAborted(() => {
+        //     res.aborted = true;
+        // });
 
         const pwd = AbstractRender.PWD;
         try {
@@ -447,7 +407,7 @@ export class RenderServer extends AbstractRender {
 }
 
 export class EventStreamHandler {
-    constructor(private res: uws.HttpResponse) { }
+    constructor(private res: ServerResponse) { }
     handle(onSend: (onData: (data: any, eventName?: string) => any) => any, onAbort: (chain?: any) => any) {
         const res = this.res;
 
@@ -471,7 +431,7 @@ export class EventStreamHandler {
         }
         return `data: ${JSON.stringify(data)}\n\n`
     }
-    sendHeaders(res: uws.HttpResponse) {
+    sendHeaders(res: ServerResponse) {
         for (const [header, value] of RenderEvent.HEADERS) {
             res.writeHeader(header, value)
         }
@@ -487,9 +447,9 @@ export class RenderEvent extends AbstractRender {
     ]
     abstractRender(isDev = false) {
         const { res, req, pathname: pageName, context } = this.options;
-        res.onAborted(() => {
-            res.aborted = true;
-        });
+        // res.onAborted(() => {
+        //     res.aborted = true;
+        // });
 
         const cookies = req.getHeader("cookie");
         const getEvent = this.getModuleFromPage(isDev);
@@ -498,13 +458,14 @@ export class RenderEvent extends AbstractRender {
             url: req.getUrl(),
             params: undefined,
             context: context,
-            getCookie: (name: string) => (cookies).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
-            headers: new Map<string, string>()
+            getCookie: (name: string) => cookies?.match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
+            headers: new Map<string, string>(Object.entries(req.getHeaders())),
         }
 
-        req.forEach((key, value) => {
-            payload.headers.set(key, value);
-        })
+        // req.forEach((key, value) => {
+        //     payload.headers.set(key, value);
+        // })
+
 
         if (pageName.includes("/:")) {
             const params = this.getParams();
@@ -575,9 +536,9 @@ export class RenderAPI extends Streamable {
         return res.cork(async () => {
             try {
                 const cookies = req.getHeader("cookie");
-                res.onAborted(() => {
-                    res.aborted = true;
-                });
+                // res.onAborted(() => {
+                //     res.aborted = true;
+                // });
 
                 const method = req.getMethod().toLowerCase();
                 const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
@@ -592,7 +553,7 @@ export class RenderAPI extends Streamable {
                     const dataCall = api({
                         url: pageName,
                         body: method !== "get" ? async () => {
-                            const contentType = req.getHeader("content-type");
+                            const contentType = req.getHeader("content-type") ?? "";
                             return await new Promise<Buffer | string>((resolve, reject) => {
                                 RenderAPI.readJson(contentType, res, (obj: Buffer | string) => {
                                     resolve(obj);
@@ -617,10 +578,10 @@ export class RenderAPI extends Streamable {
                             }
                         },
                         headers: () => {
-                            const headers = new Map<string, string>();
-                            req.forEach((key, value) => {
-                                headers.set(key, value);
-                            });
+                            const headers = new Map<string, string>(Object.entries(req.getHeaders()));
+                            // req.forEach((key, value) => {
+                            //     headers.set(key, value);
+                            // });
                             return headers;
                         },
                         setCookie: (key: string, value: string, options: string[][] = []) => {
@@ -639,22 +600,22 @@ export class RenderAPI extends Streamable {
                                     return acc;
                                 }, {});
                         },
-                        getCookie: (name: string) => (cookies).match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
+                        getCookie: (name: string) => cookies?.match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
                         writeHeader: (key: string, value: string) => {
-                            if (!res.aborted)
+                            if (!res.isAborted())
                                 res.cork(() => {
                                     res.writeHeader(key, value);
                                 })
                         },
                         status: (code: number) => {
-                            if (!res.aborted)
+                            if (!res.isAborted())
                                 res.cork(() => {
                                     res.writeStatus(code.toString());
                                 })
                         },
 
                         write: (data: string | object) => {
-                            if (!res.aborted) {
+                            if (!res.isAborted()) {
                                 if (typeof data === "string") {
                                     res.write(data);
                                 } else {
@@ -715,7 +676,7 @@ export class RenderAPI extends Streamable {
                     const data = (dataCall?.then) ? await dataCall : dataCall;
 
                     if (typeof data === "undefined" || !data) {
-                        if (!res.aborted) {
+                        if (!res.isAborted()) {
                             res.end();
                             return onAborted()
                         }
@@ -827,7 +788,7 @@ export class RenderAPI extends Streamable {
         logger.debug("RenderAPI.renderDev");
     }
 
-    getAPIMethod(pageName: string, methodName: string, version: string) {
+    getAPIMethod(pageName: string, methodName: string, version?: string) {
         const cacheAPIMethods = AbstractRender.CACHE_API_METHODS;
         const key = `${pageName}${version ? `@${version}` : ""}.${methodName}`;
         if (cacheAPIMethods.has(key)) {
@@ -843,7 +804,7 @@ export class RenderAPI extends Streamable {
         }
     }
 
-    static readJson(contextType: string, res: uws.HttpResponse, cb: any, err: any) {
+    static readJson(contextType: string, res: ServerResponse, cb: any, err: any) {
         let buffer: any = Buffer.from('');
         res.onData((ab, isLast) => {
             const chunk = Buffer.from(ab);
@@ -1026,11 +987,10 @@ export class RenderGraphQL extends Streamable {
         }
     }
 
-    readJson(res: uws.HttpResponse, cb: any) {
+    readJson(res: ServerResponse, cb: any) {
         let buffer: any = null;
         let bytes = 0;
-        /* Register data cb */
-        res.onData((ab, isLast) => {
+        res.onData((ab: ArrayBuffer, isLast: boolean) => {
             const chunk = Buffer.from(ab);
             bytes += chunk.length;
 

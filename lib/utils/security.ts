@@ -1,10 +1,10 @@
-import type { HttpResponse } from "uWebSockets.js";
+import type { ServerResponse } from "../server/interfaces";
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import Tokens from 'csrf';
 import { join } from "path";
 
 
-export const isAuth = (res: HttpResponse) => {
+export const isAuth = (res: ServerResponse) => {
     return res.authContext && res.authContext.id;
 }
 
