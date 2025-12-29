@@ -15,24 +15,20 @@ pub async fn try_serve(base_dir: &str, path: &str) -> Option<Response<Body>> {
 
   let file_path = Path::new(base_dir).join(clean_path);
 
-  // Check if file exists and is a file (not directory)
-  if !file_path.is_file() {
-    // Try with .html extension for clean URLs
-    let html_path = file_path.with_extension("html");
-    if html_path.is_file() {
-      return serve_file(&html_path).await;
-    }
-
-    // Try index.html for directories
-    let index_path = file_path.join("index.html");
-    if index_path.is_file() {
-      return serve_file(&index_path).await;
-    }
-
-    return None;
+  // Try direct file first
+  if let Some(response) = serve_file(&file_path).await {
+    return Some(response);
   }
 
-  serve_file(&file_path).await
+  // Try with .html extension for clean URLs
+  let html_path = file_path.with_extension("html");
+  if let Some(response) = serve_file(&html_path).await {
+    return Some(response);
+  }
+
+  // Try index.html for directories
+  let index_path = file_path.join("index.html");
+  serve_file(&index_path).await
 }
 
 async fn serve_file(path: &Path) -> Option<Response<Body>> {

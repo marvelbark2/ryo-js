@@ -533,255 +533,219 @@ const isObjectEmpty = (objectName: object) => {
 export class RenderAPI extends Streamable {
     async render() {
         const { res, req, pathname: pageName, context, params: p } = this.options;
-        return res.cork(async () => {
-            try {
-                const cookies = req.getHeader("cookie");
-                // res.onAborted(() => {
-                //     res.aborted = true;
-                // });
 
-                const method = req.getMethod().toLowerCase();
-                const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
-                const api = this.getAPIMethod(pageName, method, xVersion);
+        const method = req.getMethod().toLowerCase();
+        const xVersion = req.getHeader("X-API-VERSION".toLowerCase());
+        const api = this.getAPIMethod(pageName, method, xVersion);
 
-                if (api) {
-                    const onAborted = () => {
-                        if (api.onClosing) {
-                            api.onClosing();
-                        }
-                    }
-                    const dataCall = api({
-                        url: pageName,
-                        body: method !== "get" ? async () => {
-                            const contentType = req.getHeader("content-type") ?? "";
-                            return await new Promise<Buffer | string>((resolve, reject) => {
-                                RenderAPI.readJson(contentType, res, (obj: Buffer | string) => {
-                                    resolve(obj);
-                                }, () => {
-                                    /* Request was prematurely aborted or invalid or missing, stop reading */
-                                    reject('Invalid JSON or no data at all!');
-                                })
-                            })
-                        } : undefined,
-                        params: () => {
-                            const queries = queryParser(req.getQuery());
-                            const params = pageName.includes(":") ? this.getParams() : undefined;
+        if (!api) {
+            return this.renderError({ error: 405 });
+        }
 
-                            if (params && queries) {
-                                return { ...queries, ...(p || Object.fromEntries(params)) }
-                            }
-                            if (!isObjectEmpty(params || p)) {
-                                return { ...(p || Object.fromEntries(params)) }
-                            }
-                            if (!isObjectEmpty(queries)) {
-                                return { ...queries };
-                            }
-                        },
-                        headers: () => {
-                            const headers = new Map<string, string>(Object.entries(req.getHeaders()));
-                            // req.forEach((key, value) => {
-                            //     headers.set(key, value);
-                            // });
-                            return headers;
-                        },
-                        setCookie: (key: string, value: string, options: string[][] = []) => {
-                            if (options.length === 0) {
-                                res.writeHeader("Set-Cookie", `${key}=${value}`);
-                            } else {
-                                res.writeHeader("Set-Cookie", `${key}=${value};${options.map(x => `${x[0]}=${x[1]}`).join(";")}`);
-                            }
-                        },
-                        getCookies: () => {
-                            if (!cookies) return {};
-                            return cookies.split(";")
-                                .reduce((acc: any, curr: string) => {
-                                    const [key, value] = curr.split("=");
-                                    acc[key.trim()] = value.trim();
-                                    return acc;
-                                }, {});
-                        },
-                        getCookie: (name: string) => cookies?.match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
-                        writeHeader: (key: string, value: string) => {
-                            if (!res.isAborted())
-                                res.cork(() => {
-                                    res.writeHeader(key, value);
-                                })
-                        },
-                        status: (code: number) => {
-                            if (!res.isAborted())
-                                res.cork(() => {
-                                    res.writeStatus(code.toString());
-                                })
-                        },
+        // Cache cookies parsing - only parse once when needed
+        const cookieHeader = req.getHeader("cookie");
+        let parsedCookies: Record<string, string> | null = null;
 
-                        write: (data: string | object) => {
-                            if (!res.isAborted()) {
-                                if (typeof data === "string") {
-                                    res.write(data);
-                                } else {
-                                    res.write(JSON.stringify(data));
-                                }
-                            }
-                        },
+        const onAborted = () => {
+            api.onClosing?.();
+        };
 
-                        revalidate: async (pageName: string) => {
-                            // TODO: support all data types
-                            const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", "data", this.options.directRender ? pageName : `${pageName}.data.js`);
-                            const dataModule = await import(filePath);
-                            const data = dataModule.data;
+        const sendJson = (data: any) => {
+            res.cork(() => {
+                res.writeHeader("Content-Type", "application/json");
+                res.end(JSON.stringify(data));
+            });
+            onAborted();
+        };
 
-                            const getData = async () => {
-                                const oldValue = null;
-                                if (typeof dataModule.data === "function") {
-                                    return await dataModule.data();
-                                }
-                                if (data.runner) {
-                                    return await data.runner(stop, null);
-                                } else if (data.source) {
-                                    const sourceLoader = data.source;
-                                    const file = join(process.cwd(), sourceLoader.file)
-                                    const loader = sourceLoader.parser || ((data: string) => JSON.parse(data))
+        const sendError = (code: number, err?: Error) => {
+            this.renderError({ error: code, err });
+            onAborted();
+        };
 
-                                    const dataFile = readFileSync(file, "utf-8");
-
-                                    const futureData = loader(dataFile)
-
-                                    let currentValue = null;
-                                    if (futureData instanceof Promise || typeof futureData.then === "function") {
-                                        currentValue = await futureData
-                                    } else {
-                                        currentValue = futureData
-                                    }
-
-                                    if (sourceLoader.onChangeData) {
-                                        sourceLoader.onChangeData(stop, oldValue, currentValue);
-                                    }
-
-                                    return currentValue;
-                                }
-                            }
-
-                            const newValue = await getData();
-
-                            const serialize = new Serializer(newValue);
-                            writeFileSync(
-                                join(AbstractRender.PWD, ".ssr", "output", "server", "data", `${pageName}.data.json`),
-                                serialize.toJSON()
-                            )
-
-                        },
-                        context
-
-                    });
-                    const data = (dataCall?.then) ? await dataCall : dataCall;
-
-                    if (typeof data === "undefined" || !data) {
-                        if (!res.isAborted()) {
-                            res.end();
-                            return onAborted()
-                        }
-                    } else if (data.stream && data.length) {
-                        if (!data.length) {
-                            logger.error("Error reading stream");
-                            this.renderError({
-                                error: 500
-                            })
-
-                            return onAborted()
-                        } else {
-                            const stream: Readable = data.stream;
-
-                            stream.on("error", (e) => {
-                                logger.error(e);
-                                return this.renderError({
-                                    error: 500
-                                })
-                            });
-                            this.pipeStreamOverResponse(res, stream, data.length);
-
-                            return onAborted()
-                        }
-                    } else if (data.subscribe) {
-                        res.writeHeader("Content-Type", "application/json");
-                        const dispose = data.subscribe((x: any) => {
-                            logger.debug("Streamed data", x);
-                            res.write(JSON.stringify(x));
-
+        try {
+            const dataCall = api({
+                url: pageName,
+                body: method !== "get" ? async () => {
+                    const contentType = req.getHeader("content-type") ?? "";
+                    return new Promise<Buffer | string>((resolve, reject) => {
+                        RenderAPI.readJson(contentType, res, resolve, () => {
+                            reject('Invalid JSON or no data at all!');
                         });
+                    });
+                } : undefined,
+                params: () => {
+                    const queries = queryParser(req.getQuery());
+                    const params = pageName.includes(":") ? this.getParams() : undefined;
+                    const paramObj = p || (params ? Object.fromEntries(params) : undefined);
 
-                        const t = setInterval(() => {
-                            if (dispose.closed) {
-                                dispose.unsubscribe();
-                                res.end();
-                                onAborted()
-                                clearInterval(t);
-                            }
-                        }, 50)
-
-                        return;
-                    } else if (data instanceof Response) {
-                        if (!res.aborted) {
-                            res.cork(() => {
-                                const clonedData: Response = data;
-
-                                clonedData.headers.forEach((value, key) => {
-                                    res.writeHeader(key, value);
-                                });
-
-                                if (clonedData.status) {
-                                    if (clonedData.statusText) {
-                                        res.writeStatus(`${clonedData.status} ${clonedData.statusText}`);
-                                    } else {
-                                        res.writeStatus(clonedData.status.toString());
-                                    }
-                                }
-
-                                const resBody = clonedData.body;
-                                if (resBody) {
-                                    if (typeof resBody === "string") {
-                                        res.write(resBody);
-                                    } else if ("getReader" in resBody) {
-                                        return this.pipeReadableStreamOverResponse(res, resBody).then(() => onAborted());
-                                    } else if (Buffer.isBuffer(resBody)) {
-                                        const buf: Buffer = resBody;
-                                        res.tryEnd(buf as any, buf.byteLength);
-                                        return onAborted();
-                                    } else {
-                                        res.end(JSON.stringify(resBody));
-                                        return onAborted();
-                                    }
-                                } else {
-                                    res.end();
-                                    return onAborted();
-                                }
-                            })
-                            return onAborted();
-                        }
-
-                    } else {
-                        if (!res.aborted) {
-                            res.cork(() => {
-                                res.writeHeader("Content-Type", "application/json");
-                                res.end(JSON.stringify(data));
-                            })
-
-                            return onAborted()
-                        }
+                    if (paramObj && queries) return { ...queries, ...paramObj };
+                    if (paramObj && !isObjectEmpty(paramObj)) return paramObj;
+                    if (queries && !isObjectEmpty(queries)) return queries;
+                    return undefined;
+                },
+                headers: () => new Map<string, string>(Object.entries(req.getHeaders())),
+                setCookie: (key: string, value: string, options: string[][] = []) => {
+                    const cookieValue = options.length === 0
+                        ? `${key}=${value}`
+                        : `${key}=${value};${options.map(([k, v]) => `${k}=${v}`).join(";")}`;
+                    res.writeHeader("Set-Cookie", cookieValue);
+                },
+                getCookies: () => {
+                    if (!cookieHeader) return {};
+                    if (parsedCookies) return parsedCookies;
+                    parsedCookies = cookieHeader.split(";").reduce((acc: Record<string, string>, curr) => {
+                        const [key, value] = curr.split("=");
+                        if (key && value) acc[key.trim()] = value.trim();
+                        return acc;
+                    }, {});
+                    return parsedCookies;
+                },
+                getCookie: (name: string) => cookieHeader?.match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
+                writeHeader: (key: string, value: string) => {
+                    if (!res.aborted) res.writeHeader(key, value);
+                },
+                status: (code: number) => {
+                    if (!res.aborted) res.writeStatus(code.toString());
+                },
+                write: (data: string | object) => {
+                    if (!res.aborted) {
+                        res.end(typeof data === "string" ? data : JSON.stringify(data));
+                        res.aborted = true;
                     }
-                } else {
-                    return this.renderError({
-                        error: 405,
-                    })
-                }
-            } catch (e) {
-                logger.error(e);
-                return this.renderError({
-                    error: 500,
-                    err: (e as any)
-                })
+                },
+                revalidate: async (pageName: string) => {
+                    const filePath = join(AbstractRender.PWD, ".ssr", "output", "server", "data",
+                        this.options.directRender ? pageName : `${pageName}.data.js`);
+                    const dataModule = await import(filePath);
+                    const data = dataModule.data;
+
+                    const getData = async () => {
+                        if (typeof dataModule.data === "function") {
+                            return dataModule.data();
+                        }
+                        if (data.runner) {
+                            return data.runner(stop, null);
+                        }
+                        if (data.source) {
+                            const { file, parser, onChangeData } = data.source;
+                            const dataFile = readFileSync(join(process.cwd(), file), "utf-8");
+                            const loader = parser || JSON.parse;
+                            const futureData = loader(dataFile);
+                            const currentValue = futureData?.then ? await futureData : futureData;
+                            onChangeData?.(stop, null, currentValue);
+                            return currentValue;
+                        }
+                    };
+
+                    const newValue = await getData();
+                    const serialize = new Serializer(newValue);
+                    writeFileSync(
+                        join(AbstractRender.PWD, ".ssr", "output", "server", "data", `${pageName}.data.json`),
+                        serialize.toJSON()
+                    );
+                },
+                context
+            });
+
+            const data = dataCall?.then ? await dataCall : dataCall;
+
+
+            console.log("API Response Data: ", data);
+
+            // Handle empty response
+            if (data === undefined || data === null) {
+                if (!res.aborted) res.end();
+                return onAborted();
             }
 
-        });
+            // Handle stream with length
+            if (data.stream && data.length) {
+                const stream: Readable = data.stream;
+                stream.on("error", (e) => {
+                    logger.error(e);
+                    sendError(500);
+                });
+                this.pipeStreamOverResponse(res, stream, data.length);
+                return onAborted();
+            }
+
+            // Handle observable/subscription
+            if (data.subscribe) {
+                res.writeHeader("Content-Type", "application/json");
+                const dispose = data.subscribe((x: any) => {
+                    logger.debug("Streamed data", x);
+                    res.write(JSON.stringify(x));
+                });
+
+                const checkClosed = () => {
+                    if (dispose.closed) {
+                        dispose.unsubscribe();
+                        res.end();
+                        onAborted();
+                    } else {
+                        setTimeout(checkClosed, 50);
+                    }
+                };
+                checkClosed();
+                return;
+            }
+
+            // Handle Response object
+            if (data instanceof Response) {
+                if (res.aborted) return;
+
+                return res.cork(() => {
+                    data.headers.forEach((value, key) => res.writeHeader(key, value));
+
+                    if (data.status) {
+                        const status = data.statusText
+                            ? `${data.status} ${data.statusText}`
+                            : data.status.toString();
+                        res.writeStatus(status);
+                    }
+
+                    const resBody = data.body;
+                    if (!resBody) {
+                        res.end();
+                        onAborted();
+                        return;
+                    }
+
+                    if (typeof resBody === "string") {
+                        res.write(resBody);
+                        onAborted();
+                        return;
+                    }
+
+                    if ("getReader" in resBody) {
+                        this.pipeReadableStreamOverResponse(res, resBody).then(onAborted);
+                        return;
+                    }
+
+                    if (Buffer.isBuffer(resBody)) {
+                        let buf: Buffer = resBody;
+                        res.tryEnd(resBody as any, buf.byteLength);
+                        onAborted();
+                        return;
+                    }
+
+                    res.end(JSON.stringify(resBody));
+                    onAborted();
+                    return;
+                });
+            }
+
+            // Default: send as JSON
+            if (!res.aborted) {
+                sendJson(data);
+                return;
+            }
+        } catch (e) {
+            logger.error(e);
+            sendError(500, e as Error);
+            return;
+        }
     }
 
     renderDev() {

@@ -12,9 +12,16 @@ export declare class JsRequest {
 export declare class JsResponse {
   writeStatus(status: string): this
   writeHeader(key: string, value: string): this
-  write(data: Buffer): boolean
+  onAborted(callback: () => void): void
+  write(data: string | Buffer): boolean
   end(data?: string | Buffer | undefined | null): void
-  cork(callback: any): void
+  cork(callback: () => void): void
+  tryEnd(data: Buffer, totalSize: number): boolean
+  getWriteOffset(): number
+  onData(callback: (arg0: Buffer) => void): void
+  isAborted(): boolean
+  get aborted(): boolean
+  set aborted(value: boolean)
 }
 
 /** The main server class exposed to JavaScript */

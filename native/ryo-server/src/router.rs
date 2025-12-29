@@ -1,3 +1,4 @@
+use axum::body::Body;
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use std::collections::HashMap;
@@ -29,13 +30,13 @@ impl RouteHandler {
 
   pub async fn call(
     &self,
-    req: axum::extract::Request,
+    mut req: axum::extract::Request,
     _params: HashMap<String, String>,
   ) -> Result<axum::response::Response> {
     // Create channels for response streaming
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(16);
 
-    let js_req = crate::request::JsRequest::from_axum(&req);
+    let js_req = crate::request::JsRequest::from_axum(&mut req);
     let js_res = crate::response::JsResponse::new(tx);
 
     // Call JavaScript handler
@@ -47,12 +48,12 @@ impl RouteHandler {
     );
 
     // Collect response data
-    let mut body_parts = Vec::new();
+    let mut body_parts: Vec<u8> = Vec::new();
     while let Some(chunk) = rx.recv().await {
-      body_parts.extend(chunk);
+      body_parts.reserve(chunk.len());
+      body_parts.extend_from_slice(&chunk);
     }
 
-    // Build response
     Ok(
       axum::response::Response::builder()
         .status(200)
@@ -63,7 +64,7 @@ impl RouteHandler {
 }
 
 pub struct Router {
-  routes: HashMap<String, Vec<(String, RouteHandler)>>,
+  routes: HashMap<String, HashMap<String, RouteHandler>>,
 }
 
 impl Router {
@@ -76,9 +77,9 @@ impl Router {
   pub fn add_route(&mut self, method: &str, pattern: &str, handler: RouteHandler) {
     self
       .routes
-      .entry(method.to_uppercase())
-      .or_insert_with(Vec::new)
-      .push((pattern.to_string(), handler));
+      .entry(method.to_string())
+      .or_insert_with(HashMap::new)
+      .insert(pattern.to_string(), handler);
   }
 
   pub fn match_route(
@@ -86,16 +87,15 @@ impl Router {
     method: &str,
     path: &str,
   ) -> Option<(&RouteHandler, HashMap<String, String>)> {
-    let routes = self.routes.get(method)?;
-
-    for (pattern, handler) in routes {
-      if pattern == path {
-        return Some((handler, HashMap::new()));
+    let routes = match self.routes.get(method) {
+      Some(routes) => routes,
+      None => {
+        let upper = method.to_uppercase();
+        self.routes.get(&upper)?
       }
-      // Add pattern matching logic here if needed
-    }
+    };
 
-    None
+    routes.get(path).map(|handler| (handler, HashMap::new()))
   }
 }
 

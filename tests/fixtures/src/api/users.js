@@ -5,10 +5,11 @@ const users = [
 ];
 
 export function get() {
-    return {
+    console.log("Fetching users...");
+    return Response.json({
         users,
         count: users.length,
-    };
+    });
 }
 
 export async function post({ body }) {

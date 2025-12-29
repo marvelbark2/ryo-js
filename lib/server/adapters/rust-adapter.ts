@@ -12,8 +12,10 @@ try {
 }
 
 class RustRequestAdapter implements ServerRequest {
-    constructor(private inner: any) { }
+    private _queryParams: Record<string, string> | null = null;
+    private _headers: Record<string, string> | null = null;
 
+    constructor(private readonly inner: any) { }
 
     getMethod(): string {
         return this.inner.getMethod();
@@ -28,7 +30,14 @@ class RustRequestAdapter implements ServerRequest {
     }
 
     getHeaders(): Record<string, string> {
-        return this.inner.getHeaders();
+        if (!this._headers) {
+            this._headers = this.inner.getHeaders();
+        }
+
+        if (!this._headers) {
+            this._headers = {};
+        }
+        return this._headers;
     }
 
     getQuery(): string {
@@ -36,27 +45,30 @@ class RustRequestAdapter implements ServerRequest {
     }
 
     getQueryParams(): Record<string, string> {
-        const query = this.getQuery();
-        const params: Record<string, string> = {};
-        if (query) {
-            const searchParams = new URLSearchParams(query);
-            searchParams.forEach((value, key) => {
-                params[key] = value;
-            });
+        if (!this._queryParams) {
+            const query = this.getQuery();
+            if (query) {
+                this._queryParams = Object.fromEntries(new URLSearchParams(query));
+            } else {
+                this._queryParams = {};
+            }
         }
-        return params;
+        return this._queryParams;
     }
 
     getRemoteAddress(): string {
         return this.inner.getRemoteAddress?.() ?? "unknown";
     }
 
-
     getParameter(index: number): string {
         throw new Error("Method not implemented. " + index);
     }
+
     forEach(callback: (key: string, value: string) => void): void {
-        throw new Error("Method not implemented." + callback);
+        const headers = this.getHeaders();
+        for (const key in headers) {
+            callback(key, headers[key]);
+        }
     }
 
     async readBody(): Promise<Buffer> {
@@ -65,23 +77,28 @@ class RustRequestAdapter implements ServerRequest {
 }
 
 class RustResponseAdapter implements ServerResponse {
-    constructor(private inner: any) { }
-    aborted?: boolean | undefined;
-    fetched?: boolean | undefined;
-    id?: number | undefined;
-    ab?: ArrayBuffer | SharedArrayBuffer | undefined;
-    abOffset?: number | undefined;
+    fetched?: boolean;
+    id?: number;
+    ab?: ArrayBuffer | SharedArrayBuffer;
+    abOffset?: number;
     authContext?: any;
-    rewriteFrom?: string | undefined;
+    rewriteFrom?: string;
     rewrites?: any;
+    private _aborted = false;
+
+    constructor(private readonly inner: any) { }
+
     getWriteOffset(): number {
-        throw new Error("Method not implemented.");
+        return 0;
     }
+
     tryEnd(data: ArrayBuffer | SharedArrayBuffer, totalSize: number): [boolean, boolean] {
-        throw new Error("Method not implemented.");
+        this.inner.tryEnd?.(Buffer.from(data), totalSize);
+        return [true, true];
     }
+
     onWritable(callback: (offset: number) => boolean): void {
-        throw new Error("Method not implemented.");
+        this.inner.onWritable?.(callback);
     }
 
     writeStatus(status: string): this {
@@ -95,17 +112,20 @@ class RustResponseAdapter implements ServerResponse {
     }
 
     write(chunk: string | ArrayBuffer): boolean {
-        const buf = typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk);
-        return this.inner.write(buf);
+        return this.inner.write(typeof chunk === "string" ? chunk : Buffer.from(chunk));
     }
 
     end(body?: string | ArrayBuffer): void {
-        const buf = body === undefined ? undefined : (typeof body === "string" ? Buffer.from(body) : Buffer.from(body));
-        this.inner.end(buf);
+        if (body !== undefined) {
+            this.inner.end(typeof body === "string" ? body : Buffer.from(body));
+        } else {
+            this.inner.end();
+        }
+        this._aborted = true;
     }
 
     isAborted(): boolean {
-        return this.inner.isAborted?.() ?? false;
+        return this._aborted || (this.inner.isAborted?.() ?? false);
     }
 
     onAborted(callback: () => void): void {
@@ -117,13 +137,39 @@ class RustResponseAdapter implements ServerResponse {
     }
 
     cork(callback: () => void): void {
-        this.inner.cork?.(callback) ?? callback();
+        if (this.inner.cork) {
+            this.inner.cork(callback);
+        } else {
+            callback();
+        }
+    }
+
+    get aborted(): boolean {
+        return this._aborted;
+    }
+
+    set aborted(value: boolean) {
+        if (value) {
+            this._aborted = true;
+            this.inner.end?.();
+        }
     }
 }
 
+// Method registration lookup table
+const METHOD_REGISTRARS: Record<string, string> = {
+    GET: "get",
+    POST: "post",
+    PUT: "put",
+    DELETE: "delete",
+    PATCH: "patch",
+    OPTIONS: "options",
+    HEAD: "head",
+    ANY: "any",
+};
+
 export class RustAppAdapter implements ServerApp {
-    private server: any;
-    private handlers: Map<string, (res: ServerResponse, req: ServerRequest) => void> = new Map();
+    private readonly server: any;
 
     constructor(options?: { ssl?: boolean; key?: string; cert?: string }) {
         if (!RyoServer) {
@@ -141,29 +187,13 @@ export class RustAppAdapter implements ServerApp {
         pattern: string,
         handler: (res: ServerResponse, req: ServerRequest) => void
     ): this {
-        const key = `${method}:${pattern}`;
-        this.handlers.set(key, handler);
-
-        // Register with Rust, providing a callback
-        const callback = (_: any, rustRes: any, rustReq: any) => {
-            const res = new RustResponseAdapter(rustRes);
-            const req = new RustRequestAdapter(rustReq);
-            handler(res, req);
-        };
-
-        switch (method) {
-            case "GET":
-                this.server.get(pattern, callback);
-                break;
-            case "POST":
-                this.server.post(pattern, callback);
-                break;
-            case "ANY":
-                this.server.any(pattern, callback);
-                break;
-            // ... other methods
+        const methodFn = METHOD_REGISTRARS[method];
+        if (methodFn && this.server[methodFn]) {
+            this.server[methodFn](pattern, (_: any, rustRes: any, rustReq: any) => {
+                handler(rustRes, rustReq);
+                //handler(new RustResponseAdapter(rustRes), new RustRequestAdapter(rustReq));
+            });
         }
-
         return this;
     }
 
@@ -196,13 +226,13 @@ export class RustAppAdapter implements ServerApp {
     }
 
     ws<UserData>(pattern: string, behavior: WebSocketBehavior<UserData>): this {
-        // WebSocket support would need additional Rust implementation
         console.warn("WebSocket support in Rust backend is not yet implemented");
         return this;
     }
 
     listen(port: number, callback?: (listenSocket: any) => void): this {
-        this.server.listen(port).then(() => {
+        this.server.listen(port, (url: string) => {
+            console.log(`Rust server listening on ${url}`);
             callback?.("RUST_LISTEN_SOCKET");
         });
         return this;

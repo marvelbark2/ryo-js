@@ -1,6 +1,6 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 mod request;
 mod response;
@@ -14,8 +14,8 @@ use crate::{request::JsRequest, response::JsResponse};
 /// The main server class exposed to JavaScript
 #[napi]
 pub struct RyoServer {
-  router: Arc<Mutex<Router>>,
-  static_dir: Option<String>,
+  router: Arc<RwLock<Router>>,
+  static_dir: Option<Arc<str>>,
   port: u16,
 }
 
@@ -24,7 +24,7 @@ impl RyoServer {
   #[napi(constructor)]
   pub fn new() -> Self {
     Self {
-      router: Arc::new(Mutex::new(Router::new())),
+      router: Arc::new(RwLock::new(Router::new())),
       static_dir: None,
       port: 3000,
     }
@@ -33,7 +33,7 @@ impl RyoServer {
   /// Set the directory for static file serving
   #[napi]
   pub fn set_static_dir(&mut self, dir: String) {
-    self.static_dir = Some(dir);
+    self.static_dir = Some(Arc::<str>::from(dir));
   }
 
   /// Register a GET route handler
@@ -46,7 +46,7 @@ impl RyoServer {
     let handler = RouteHandler::new(handler)?;
     self
       .router
-      .lock()
+      .write()
       .unwrap()
       .add_route("GET", &pattern, handler);
     Ok(())
@@ -62,7 +62,7 @@ impl RyoServer {
     let handler = RouteHandler::new(handler)?;
     self
       .router
-      .lock()
+      .write()
       .unwrap()
       .add_route("POST", &pattern, handler);
     Ok(())
@@ -76,7 +76,7 @@ impl RyoServer {
     handler: Function<FnArgs<(JsResponse, JsRequest)>, ()>,
   ) -> Result<()> {
     let handler = RouteHandler::new(handler)?;
-    let mut router = self.router.lock().unwrap();
+    let mut router = self.router.write().unwrap();
     for method in ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"] {
       router.add_route(method, &pattern, handler.clone());
     }
@@ -118,22 +118,22 @@ impl RyoServer {
 
 async fn handle_request(
   req: axum::extract::Request,
-  router: Arc<Mutex<Router>>,
-  static_dir: Option<String>,
+  router: Arc<RwLock<Router>>,
+  static_dir: Option<Arc<str>>,
 ) -> axum::response::Response {
   let method = req.method().as_str();
   let path = req.uri().path();
 
   // First, try to serve static files (if configured)
   if let Some(ref dir) = static_dir {
-    if let Some(response) = static_files::try_serve(dir, path).await {
+    if let Some(response) = static_files::try_serve(dir.as_ref(), path).await {
       return response;
     }
   }
 
   // Look up the route in our router
   let handler_and_params = {
-    let router_guard = router.lock().unwrap();
+    let router_guard = router.read().unwrap();
     router_guard
       .match_route(method, path)
       .map(|(h, p)| (h.clone(), p))
