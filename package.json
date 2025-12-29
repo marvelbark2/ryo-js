@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.70",
+  "version": "0.0.0-meme.71",
   "description": "Ryo-js is a fullstack framework for building universal web applications with preact and graphql.",
   "sideEffects": false,
   "scripts": {
@@ -65,6 +65,7 @@
     "@types/html-minifier": "4.0.5",
     "@types/node": "^20.11.19",
     "@types/node-fetch": "^2.6.11",
+    "esbuild-register": "^3.6.0",
     "jsdom": "^27.3.0",
     "typescript": "^5.3.3",
     "vitest": "^4.0.16"

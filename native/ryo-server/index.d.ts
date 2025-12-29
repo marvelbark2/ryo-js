@@ -18,7 +18,7 @@ export declare class JsResponse {
   cork(callback: () => void): void
   tryEnd(data: Buffer, totalSize: number): boolean
   getWriteOffset(): number
-  onData(callback: (arg0: Buffer) => void): void
+  onData(callback: (arg0: Buffer, arg1: boolean) => void): void
   isAborted(): boolean
   get aborted(): boolean
   set aborted(value: boolean)

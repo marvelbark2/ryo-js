@@ -650,9 +650,6 @@ export class RenderAPI extends Streamable {
 
             const data = dataCall?.then ? await dataCall : dataCall;
 
-
-            console.log("API Response Data: ", data);
-
             // Handle empty response
             if (data === undefined || data === null) {
                 if (!res.aborted) res.end();

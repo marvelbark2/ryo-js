@@ -98,7 +98,13 @@ impl RyoServer {
       .map_err(|e| Error::from_reason(format!("Failed to create runtime: {}", e)))?;
 
     rt.spawn(async move {
-      let app = axum::Router::new().fallback(move |req: axum::extract::Request| async move {
+      // let app = axum::Router::new().fallback(move |req: axum::extract::Request| async move {
+      //   handle_request(req, router.clone(), static_dir.clone()).await
+      // });
+
+      let axum_router = router.write().unwrap().build().unwrap();
+
+      let app: axum::Router = axum_router.fallback(move |req: axum::extract::Request| async move {
         handle_request(req, router.clone(), static_dir.clone()).await
       });
 
