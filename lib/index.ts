@@ -6,7 +6,6 @@ import ps from "./utils/pubsub";
 
 import babelRegister from "@babel/register";
 
-
 import "./polyfills/index";
 
 import { getPages } from "./utils/page";
@@ -20,6 +19,8 @@ import { changePageToRoute, getAsyncValue, getMiddleware, getMiddlewareInitMode,
 import { pathToRegexp, match } from "path-to-regexp"
 import { isAuth, sessionPassword, csrf, globToRegex } from "./utils/security";
 import { Context } from "./utils/context";
+import { createServer } from "./server";
+import type { ServerRequest, ServerResponse, ServerApp } from "./server/interfaces";
 
 let uwsToken: uws.us_listen_socket | null;
 const requireCaches = new Set<string>()
@@ -53,14 +54,11 @@ export default async function server(env = "production") {
 
     const ryoConfig = await loadConfig();
 
-    const app = ryoConfig.ssl ? (
-        uws.SSLApp({
-            key_file_name: ryoConfig.ssl?.key_file_name,
-            cert_file_name: ryoConfig.ssl?.cert_file_name,
-            passphrase: ryoConfig.ssl?.passphrase,
-        })
-    ) : uws.App()
-
+    const app: ServerApp = createServer(ryoConfig.server_engine, {
+        ssl: !!ryoConfig.ssl,
+        key: ryoConfig.ssl?.key_file_name,
+        cert: ryoConfig.ssl?.cert_file_name,
+    });
 
     const ssrdir = join(pwd, ryoConfig.build?.outDir ?? ".ssr");
 
@@ -109,7 +107,7 @@ export default async function server(env = "production") {
 
         return path;
     }
-    const handleAuth = (req: uws.HttpRequest, res: uws.HttpResponse, next: any) => {
+    const handleAuth = (req: ServerRequest, res: ServerResponse, next: any) => {
         if (isSecureContext && ryoConfig.security) {
             const loginPath = ryoConfig.security.loginPath || "/login";
             const authorizeHttpRequests = ryoConfig.security.authorizeHttpRequests;
@@ -193,10 +191,10 @@ export default async function server(env = "production") {
         }
     }
 
-    const authFilter = (req: uws.HttpRequest, res: uws.HttpResponse, next: any) => {
+    const authFilter = (req: ServerRequest, res: ServerResponse, next: any) => {
         if (ryoConfig.security) {
             if (ryoConfig.security.csrf !== false) {
-                const reqMethod = req.getMethod().toLocaleUpperCase();
+                const reqMethod = req.getMethod().toUpperCase();
                 if (reqMethod === "POST" || reqMethod === "PUT" || reqMethod === "DELETE") {
                     const csrfToken = req.getHeader("X-CSRF-TOKEN");
                     if (!csrfToken || !csrf.verifyToken(csrfToken)) {
@@ -374,8 +372,7 @@ export default async function server(env = "production") {
     }
 
 
-    const getRenderProps = (res: uws.HttpResponse, req: uws.HttpRequest, path = "", params?: any): RenderProps => {
-
+    const getRenderProps = (res: ServerResponse, req: ServerRequest, path = "", params?: any): RenderProps => {
         return {
             req, res, buildReport,
             pathname: path || req.getUrl(),
@@ -386,7 +383,7 @@ export default async function server(env = "production") {
         }
     }
 
-    function rewrites({ req, res }: { req: uws.HttpRequest, res: uws.HttpResponse }, { path, params, withStatic }: { path: string, params?: Record<string, string>, withStatic?: boolean }) {
+    function rewrites({ req, res }: { req: ServerRequest, res: ServerResponse }, { path, params, withStatic }: { path: string, params?: Record<string, string>, withStatic?: boolean }) {
         const p = changePageToRoute(params && path.includes("/:") ? Object.keys(params).reduce((acc, key) => {
             return acc.replace(`:${key}`, params[key]);
         }, path) : path);
@@ -599,11 +596,11 @@ export default async function server(env = "production") {
                 const gqlObject = gqlModule.default ? gqlModule.default : gqlModule;
                 if (gqlObject) {
                     app.ws(page, {
-                        compression: uws.SHARED_COMPRESSOR,
+                        compression: 1,
                         maxPayloadLength: 16 * 1024 * 1024,
                         idleTimeout: 16,
 
-                        message: async (ws, message, isBinary) => {
+                        message: async (ws, message, _isBinary) => {
                             const data = Buffer.from(message).toString();
                             const parsed = JSON.parse(data);
 
@@ -663,7 +660,7 @@ export default async function server(env = "production") {
             });
             app.get(pageName, (res, req) => {
                 return middlewareFn(req, res, () => new RenderEvent(getRenderProps(res, req, pageServerName)));
-            })
+            });
         } else if (isCron) {
             paths.set(pageName, {
                 clazz: RenderEvent,
@@ -671,7 +668,7 @@ export default async function server(env = "production") {
             });
             app.get(pageName, (res, req) => {
                 new RenderEvent(getRenderProps(res, req, pageServerName))
-            })
+            });
         } else if (isQGL) {
             paths.set(pageName, {
                 clazz: RenderGraphQL,
@@ -753,7 +750,7 @@ export default async function server(env = "production") {
                 middlewareFn(req, res, () => new RenderStatic(getRenderProps(res, req, pageServerName)));
             })
         }
-        app.get(`${pageName}/`, (res) => {
+        app.get(`${pageName}/`, (res, _req) => {
             res.writeStatus('302')
             res.writeHeader('location', pageName)
             res.end()
@@ -762,7 +759,7 @@ export default async function server(env = "production") {
         const pageWithoutSlash = pageServerName.slice(1)
 
         if (buildOfflineReport.includes(pageWithoutSlash)) {
-            app.get(`/offline-service-${pageWithoutSlash}`, (res) => {
+            app.get(`/offline-service-${pageWithoutSlash}`, (res, _req) => {
                 const SCRIPT = `
                 
                 const OFFLINE_VERSION = "${pageWithoutSlash}";
@@ -896,7 +893,7 @@ export default async function server(env = "production") {
                 const object = _require(file).default;
                 if (object) {
                     app.ws(`/${pageName}`, {
-                        compression: uws.SHARED_COMPRESSOR,
+                        compression: 1,
                         maxPayloadLength: 16 * 1024 * 1024,
                         idleTimeout: 16,
                         open: object.open,
@@ -919,10 +916,10 @@ export default async function server(env = "production") {
         .forEach(([page, hasData]) => {
             if (hasData || page.includes("/:")) {
                 app.ws(`${page}.data`, {
-                    compression: uws.SHARED_COMPRESSOR,
+                    compression: 1,
                     maxPayloadLength: 16 * 1024 * 1024,
                     idleTimeout: 16,
-                    open: (ws: uws.WebSocket<any>) => {
+                    open: (ws) => {
                         if (hasData) {
                             const unsub = ps.subscribe((msg, data) => {
                                 if (msg === `fetch-${page}` && data) {
@@ -940,7 +937,7 @@ export default async function server(env = "production") {
                         }
                     },
 
-                    close: (ws, code, message) => {
+                    close: (_ws, _code, _message) => {
                         if (hasData && subscriptions.has(page)) {
                             const fn = subscriptions.get(page);
                             if (typeof fn === "function") {
@@ -954,7 +951,7 @@ export default async function server(env = "production") {
 
 
     if (process.env.NODE_ENV === "development" || env === "dev") {
-        app.get("/ryo_framework", (res) => {
+        app.get("/ryo_framework", (res, _req) => {
             const eventStreamHandler = new EventStreamHandler(res);
             eventStreamHandler.handle(
                 (sendData) => {
@@ -1048,7 +1045,7 @@ export default async function server(env = "production") {
                 }
             }
 
-        })
+        });
     }
     app.listen(+port, (token) => {
         if (token) {

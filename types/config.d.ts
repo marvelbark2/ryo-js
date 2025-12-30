@@ -18,6 +18,7 @@ type A = (AuthContextPayload & {
 declare module "RyoConfig" {
     export type RyoConfig = {
         port?: number;
+        server_engine?: "uws" | "rust";
         ssl?: {
             key_file_name: string,
             cert_file_name: string,

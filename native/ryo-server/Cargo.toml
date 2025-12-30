@@ -1,0 +1,59 @@
+
+[package]
+authors = ["LongYinan <lynweklm@gmail.com>"]
+edition = "2024"
+name = "ryo_server"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+axum = "0.7"
+napi = { version = "3", features = ["async"] }
+napi-derive = "3.0.0"
+rustls = "0.22"
+tokio-rustls = "0.25"
+async-channel = "2"
+bytes = "1"
+futures = "0.3"
+http = "1"
+http-body-util = "0.1"
+matchit = "0.8"
+mime_guess = "2"
+num_cpus = "1"
+percent-encoding = "2"
+anyhow = "1"
+thiserror = "1"
+
+[dependencies.hyper]
+version = "1"
+features = ["full"]
+
+[dependencies.hyper-util]
+version = "0.1"
+features = ["tokio"]
+
+
+[dependencies.tokio]
+version = "1"
+features = ["full"]
+
+[dependencies.tower]
+version = "0.4"
+features = ["util"]
+
+[dependencies.tower-http]
+version = "0.5"
+features = ["fs", "cors", "compression-gzip"]
+
+[dependencies.tokio-util]
+version = "0.7"
+features = ["io"]
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+strip = "symbols"
