@@ -456,7 +456,7 @@ export class RenderEvent extends AbstractRender {
         const event = getEvent.default;
         const payload = {
             url: req.getUrl(),
-            params: undefined,
+            params: (undefined as undefined | Record<string, string>),
             context: context,
             getCookie: (name: string) => cookies?.match(new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`))?.[2],
             headers: new Map<string, string>(Object.entries(req.getHeaders())),
@@ -470,8 +470,7 @@ export class RenderEvent extends AbstractRender {
         if (pageName.includes("/:")) {
             const params = this.getParams();
             if (params) {
-                // @ts-ignore
-                payload.params = Array.from(params.entries()).reduce((acc, [key, value]) => {
+                payload.params = Object.entries(params).reduce((acc, [key, value]) => {
                     // @ts-ignore
                     acc[key.replace(".ev", "")] = value.replace(".ev", "");
                     return acc;
@@ -484,7 +483,6 @@ export class RenderEvent extends AbstractRender {
             const eventStreamHandler = new EventStreamHandler(res);
 
             if (typeof event === "function") {
-
                 const eventCall = event(payload);
                 eventStreamHandler.handle(
                     (sendData) => eventCall.onSend(sendData),
