@@ -88,6 +88,10 @@ class RustResponseAdapter implements ServerResponse {
 
     constructor(private readonly inner: any) { }
 
+    readJson(contextType: string, cb: any, err: any): void {
+        throw new Error("Method not implemented.");
+    }
+
     getWriteOffset(): number {
         return 0;
     }
@@ -190,8 +194,8 @@ export class RustAppAdapter implements ServerApp {
         const methodFn = METHOD_REGISTRARS[method];
         if (methodFn && this.server[methodFn]) {
             this.server[methodFn](pattern, (_: any, rustRes: any, rustReq: any) => {
-                handler(rustRes, rustReq);
-                //handler(new RustResponseAdapter(rustRes), new RustRequestAdapter(rustReq));
+                //handler(rustRes, rustReq);
+                handler(new RustResponseAdapter(rustRes), new RustRequestAdapter(rustReq));
             });
         }
         return this;
@@ -231,9 +235,9 @@ export class RustAppAdapter implements ServerApp {
     }
 
     listen(port: number, callback?: (listenSocket: any) => void): this {
-        this.server.listen(port, (url: string) => {
+        this.server.listen(port, (_: any, url: string) => {
             console.log(`Rust server listening on ${url}`);
-            callback?.("RUST_LISTEN_SOCKET");
+            callback?.(url);
         });
         return this;
     }

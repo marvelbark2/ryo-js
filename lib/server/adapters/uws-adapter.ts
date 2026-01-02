@@ -1,7 +1,10 @@
-import { App, SSLApp } from "uWebSockets.js";
+import { App, SSLApp, getParts } from "uWebSockets.js";
 
 import type { HttpRequest, HttpResponse, TemplatedApp } from "uWebSockets.js";
 import type { ServerRequest, ServerResponse, ServerApp, WebSocketBehavior } from "../interfaces";
+
+
+import { parse as queryParser } from "querystring"
 
 export class UWSRequestAdapter implements ServerRequest {
     constructor(private req: HttpRequest, private res: HttpResponse) { }
@@ -77,14 +80,51 @@ export class UWSResponseAdapter implements ServerResponse {
     id = 0;
     ab?: ArrayBuffer | SharedArrayBuffer;
     abOffset?: number;
+    authContext?: any;
+    rewriteFrom?: string | undefined;
+    rewrites?: any;
 
     private _abortHandlers: Array<() => void> = [];
+
 
     constructor(private res: HttpResponse) {
         this.res.onAborted(() => {
             this.aborted = true;
             this._abortHandlers.forEach(h => h());
         });
+    }
+
+
+    readJson(contextType: string, cb: any, err: any): void {
+        const res = this.res;
+
+        let buffer: any = Buffer.from('');
+        res.onData((ab, isLast) => {
+            const chunk = Buffer.from(ab);
+            buffer = Buffer.concat([buffer, chunk]);
+            if (isLast) {
+                if (buffer.length === 0) {
+                    cb(undefined);
+                } else if (contextType.includes("multipart/form-data")) {
+                    const data = getParts(buffer as any, contextType);
+                    cb(data);
+                } else if (contextType.includes("application/json")) {
+                    try {
+                        const json = JSON.parse(buffer.toString());
+                        cb(json);
+                    } catch {
+                        cb(buffer);
+                    }
+                } else if (contextType.includes("application/x-www-form-urlencoded")) {
+                    cb(queryParser(buffer.toString()));
+                } else {
+                    cb(buffer);
+                }
+
+            }
+        });
+
+        res.onAborted(err);
     }
 
     writeStatus(status: string): this {
@@ -145,6 +185,8 @@ export class UWSResponseAdapter implements ServerResponse {
 
 export class UWSAppAdapter implements ServerApp {
     private app: TemplatedApp;
+    private _uws_token?: any;
+
 
     constructor(options?: { ssl?: boolean; key?: string; cert?: string }) {
         if (options?.ssl) {
@@ -206,12 +248,18 @@ export class UWSAppAdapter implements ServerApp {
     }
 
     listen(port: number, callback?: (listenSocket: any) => void): this {
-        this.app.listen(port, callback || (() => { }));
+        this.app.listen(port, (token) => {
+            this._uws_token = token;
+            callback?.(token);
+        });
         return this;
     }
 
     close(): void {
-        // uWS doesn't have a direct close method on the app
+        if (this._uws_token) {
+            (this.app as any).close(this._uws_token);
+            this._uws_token = undefined;
+        }
     }
 }
 

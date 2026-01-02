@@ -1,4 +1,3 @@
-import * as uws from "uWebSockets.js";
 import { AbstractRender, EventStreamHandler, RenderAPI, RenderData, RenderEvent, RenderGraphQL, RenderPage, RenderProps, RenderServer, RenderStatic, RenderError } from "./runtime/render";
 import { join } from "path";
 import { existsSync, readFileSync } from 'fs';
@@ -22,7 +21,6 @@ import { Context } from "./utils/context";
 import { createServer } from "./server";
 import type { ServerRequest, ServerResponse, ServerApp } from "./server/interfaces";
 
-let uwsToken: uws.us_listen_socket | null;
 const requireCaches = new Set<string>()
 const shouldRestart: string[] = [];
 
@@ -987,7 +985,7 @@ export default async function server(env = "production") {
             });
             const contentType = req.getHeader("content-type");
             const o = await new Promise((resolve) => {
-                RenderAPI.readJson(contentType, res, (o: any) => {
+                res.readJson(contentType, (o: any) => {
                     resolve(o);
                 }, (e: any) => {
                     logger.error({ e })
@@ -1056,19 +1054,13 @@ export default async function server(env = "production") {
                     context: globalContext
                 });
             }
-            uwsToken = token;
             logger.info("Listening to port " + port);
         } else {
             logger.error("Failed to listen to port " + port);
         }
     });
     return () => {
-        if (uwsToken) {
-            logger.debug('Shutting down now');
-            uws.us_listen_socket_close(uwsToken);
-            AbstractRender.ClearCache()
-            uwsToken = null;
-        }
+        app.close();
     }
 }
 

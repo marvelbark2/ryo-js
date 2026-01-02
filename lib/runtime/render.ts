@@ -13,7 +13,6 @@ import logger from '../utils/logger';
 import EntryClient from '../entry';
 import { getAsyncValue, getMiddleware } from '../utils/global';
 import { parse as queryParser } from "querystring"
-import { getParts } from 'uWebSockets.js';
 import { Context } from '../utils/context';
 
 import type { ServerRequest, ServerResponse } from "../server/interfaces";
@@ -567,7 +566,7 @@ export class RenderAPI extends Streamable {
                 body: method !== "get" ? async () => {
                     const contentType = req.getHeader("content-type") ?? "";
                     return new Promise<Buffer | string>((resolve, reject) => {
-                        RenderAPI.readJson(contentType, res, resolve, () => {
+                        res.readJson(contentType, resolve, () => {
                             reject('Invalid JSON or no data at all!');
                         });
                     });
@@ -761,37 +760,6 @@ export class RenderAPI extends Streamable {
             cacheAPIMethods.set(key, result);
             return result;
         }
-    }
-
-    static readJson(contextType: string, res: ServerResponse, cb: any, err: any) {
-        let buffer: any = Buffer.from('');
-        res.onData((ab, isLast) => {
-            const chunk = Buffer.from(ab);
-            buffer = Buffer.concat([buffer, chunk]);
-            if (isLast) {
-                if (buffer.length === 0) {
-                    cb(undefined);
-                } else if (contextType.includes("multipart/form-data")) {
-                    const data = getParts(buffer as any, contextType);
-                    cb(data);
-                } else if (contextType.includes("application/json")) {
-                    try {
-                        const json = JSON.parse(buffer.toString());
-                        cb(json);
-                    } catch {
-                        cb(buffer);
-                    }
-                } else if (contextType.includes("application/x-www-form-urlencoded")) {
-                    cb(queryParser(buffer.toString()));
-                } else {
-                    cb(buffer);
-                }
-
-            }
-        });
-
-        res.onAborted(err);
-
     }
 }
 
@@ -1048,37 +1016,6 @@ export class RenderStatic extends Streamable {
         } else if (Object.keys(RenderStatic.MIME_TYPE).includes(ext)) {
             const mime = RenderStatic.MIME_TYPE[ext];
             if (mime) {
-                // res.writeHeader("Content-Type", mime);
-                // let compressed = false;
-                // if (['js', 'css'].includes(ext)) {
-                //     res.writeHeader("Content-Encoding", "gzip");
-                //     compressed = true;
-                // }
-                // const filePath = join(AbstractRender.PWD, ".ssr", "output", "static", path);
-
-                // if (compressed) {
-                //     if (!isDev)
-                //         res.writeHeader("Cache-Control", "public, max-age=31536000, immutable");
-
-                //     const text = readFileSync(filePath, 'utf-8');
-
-                //     res.cork(() => {
-                //         res.onAborted(() => {
-                //             res.aborted = true;
-                //         })
-                //         gzip(text, function (_, result) {
-                //             res.end(result);
-                //         })
-                //         return;
-                //     })
-                // } else {
-                //     res.cork(() => {
-                //         const stream = createReadStream(filePath)
-                //         const size = stream.bytesRead;
-                //         return this.pipeStreamOverResponse(res, stream, size);
-                //     });
-                // }
-
                 res.onAborted(() => {
                     res.aborted = true;
                 });

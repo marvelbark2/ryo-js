@@ -1,21 +1,24 @@
-let RyoServer: any;
+import type { RyoServer } from "../native/ryo-server"
+
+let RyoServerInstance: { RyoServer: typeof RyoServer } | null = null;
 
 try {
     // Try to load the native module
-    RyoServer = require("../native/ryo-server");
+    RyoServerInstance = require("../native/ryo-server");
 } catch (e) {
-    console.warn("Rust server module not available, falling back to uWS", e);
-    RyoServer = null;
+    console.warn("Could not load Rust server module:", e);
+    RyoServerInstance = null;
 }
-if (!RyoServer) {
+if (!RyoServerInstance) {
     throw new Error("Rust server module not available");
 }
-const server = new RyoServer.RyoServer();
+const server = new RyoServerInstance.RyoServer();
 
-server.get("/ping", (_: any, res: any, req: any) => {
+server.get("/ping", (_: any, res: any) => {
     res.end("pong");
+
 });
 
-server.listen(3000, () => {
-    console.log("Rust server listening on http://localhost:3000");
+server.listen(3000, (_: any, url: string) => {
+    console.log(`Rust server listening on http://${url}`);
 });

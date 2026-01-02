@@ -1,7 +1,7 @@
 import type { ServerApp } from "./interfaces";
 import { createUWSServer } from "./adapters/uws-adapter";
 
-export type ServerBackend = "uws" | "rust";
+export type ServerBackend = "uws" | "rust" | "node";
 
 export function createServer(
     backend: ServerBackend = "uws",
@@ -13,6 +13,9 @@ export function createServer(
         case "rust":
             const { createRustServer } = require("./adapters/rust-adapter");
             return createRustServer(options);
+        case "node":
+            const { createNodeServer } = require("./adapters/node-adapter");
+            return createNodeServer();
         default:
             throw new Error(`Unknown backend: ${backend}`);
     }

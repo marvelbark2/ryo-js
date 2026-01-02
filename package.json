@@ -1,6 +1,6 @@
 {
   "name": "ryo.js",
-  "version": "0.0.0-meme.71",
+  "version": "0.0.0-meme.72",
   "description": "Ryo-js is a fullstack framework for building universal web applications with preact and graphql.",
   "sideEffects": false,
   "scripts": {
@@ -12,7 +12,7 @@
     "build:cjs": "tsc --module commonjs --target es5 --outDir dist/cjs --isolatedModules true --declaration false",
     "build:rust": "cd native/ryo-server && napi build --release --platform && cp *.node index.js index.d.ts ../../dist/cjs/native/ryo-server/",
     "build:rust:debug": "cd native/ryo-server && napi build",
-    "prepublishOnly": "npm run build:cjs",
+    "prepublishOnly": "npm run build",
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",

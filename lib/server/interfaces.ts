@@ -42,7 +42,9 @@ export interface ServerResponse {
     getWriteOffset(): number;
     tryEnd(data: ArrayBuffer | SharedArrayBuffer, totalSize: number): [boolean, boolean];
     onWritable(callback: (offset: number) => boolean): void;
+    readJson(contextType: string, cb: any, err: any): void
 }
+
 
 export interface WebSocketBehavior<UserData = unknown> {
     compression?: number;
