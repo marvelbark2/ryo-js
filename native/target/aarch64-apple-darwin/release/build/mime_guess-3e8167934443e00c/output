@@ -1,1 +1,0 @@
-cargo:rustc-env=MIME_TYPES_GENERATED_PATH=/Users/younesmasaoudi/projects/ryo-js/native/target/aarch64-apple-darwin/release/build/mime_guess-3e8167934443e00c/out/mime_types_generated.rs
