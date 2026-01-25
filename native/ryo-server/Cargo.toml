@@ -1,68 +1,28 @@
-
 [package]
-authors = ["LongYinan <lynweklm@gmail.com>"]
-edition = "2024"
-name = "ryo_server"
+name = "ryo-server"
 version = "0.1.0"
+edition = "2024"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-axum = "0.7"
-napi = { version = "3", features = [
-  "async",
-  "serde-json"
-] }
-napi-derive = "3.0.0"
-rustls = "0.22"
-tokio-rustls = "0.25"
-async-channel = "2"
-bytes = "1"
-futures = "0.3"
-http = "1"
-http-body-util = "0.1"
-matchit = "0.8"
-mime_guess = "2"
+# ---- N-API ----
+napi = { version = "3", features = ["async"] }
+napi-derive = "3"
+
+# ---- Core server (pure Rust) ----
+ryo-core = { path = "../ryo-core" }
+
+# ---- Runtime (single shared runtime) ----
+tokio = { version = "1", features = ["rt-multi-thread"] }
+once_cell = "1"
 num_cpus = "1"
-percent-encoding = "2"
-anyhow = "1"
-thiserror = "1"
-once_cell = "1.21.3"
-serde_json = "1.0.148"
-mimalloc = "0.1.48"
 
-[dependencies.hyper]
-version = "1"
-features = ["full"]
-
-[dependencies.hyper-util]
-version = "0.1"
-features = ["tokio"]
-
-
-[dependencies.tokio]
-version = "1"
-features = ["rt-multi-thread", "net", "macros", "time"]
-
-[dependencies.tower]
-version = "0.4"
-features = ["util"]
-
-[dependencies.tower-http]
-version = "0.5"
-features = ["fs"]
-
-[dependencies.tokio-util]
-version = "0.7"
-features = ["io"]
+# ---- Used by dispatcher ----
+futures = "0.3"
+axum = "0.7"
 
 [build-dependencies]
 napi-build = "2"
-
-[profile.release]
-lto = "fat"
-opt-level = 3
-codegen-units = 1
-panic = "abort"
-strip = "symbols"

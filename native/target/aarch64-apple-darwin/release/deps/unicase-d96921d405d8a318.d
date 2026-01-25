@@ -1,0 +1,10 @@
+/Users/younesmasaoudi/projects/ryo-js/native/target/aarch64-apple-darwin/release/deps/unicase-d96921d405d8a318.d: /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/lib.rs /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/ascii.rs /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/unicode/mod.rs /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/unicode/map.rs
+
+/Users/younesmasaoudi/projects/ryo-js/native/target/aarch64-apple-darwin/release/deps/libunicase-d96921d405d8a318.rlib: /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/lib.rs /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/ascii.rs /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/unicode/mod.rs /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/unicode/map.rs
+
+/Users/younesmasaoudi/projects/ryo-js/native/target/aarch64-apple-darwin/release/deps/libunicase-d96921d405d8a318.rmeta: /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/lib.rs /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/ascii.rs /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/unicode/mod.rs /Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/unicode/map.rs
+
+/Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/lib.rs:
+/Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/ascii.rs:
+/Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/unicode/mod.rs:
+/Users/younesmasaoudi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0/src/unicode/map.rs:

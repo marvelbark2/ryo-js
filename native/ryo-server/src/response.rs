@@ -1,303 +1,299 @@
+use std::sync::{
+  Arc, Mutex,
+  atomic::{AtomicBool, AtomicU16, AtomicU32, Ordering},
+};
+
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::mpsc;
 
-/// Buffered operations during cork
-#[derive(Default)]
-struct CorkBuffer {
-  status: Option<u16>,
-  headers: Vec<(String, String)>,
-  body_chunks: Vec<Vec<u8>>,
-  should_end: bool,
-  end_data: Option<Vec<u8>>,
-  total_size: u32,
-  write_offset: u32,
+use tokio::sync::oneshot;
+
+/// What we send back to Rust dispatcher once JS ends the response.
+#[derive(Debug)]
+pub struct ResponseParts {
+  pub status: u16,
+  pub headers: Vec<(String, String)>,
+  pub body: Vec<u8>,
 }
 
-/// JavaScript-facing response object
+struct Inner {
+  status: AtomicU16,
+  aborted: AtomicBool,
+  ended: AtomicBool,
+
+  headers: Mutex<Vec<(String, String)>>,
+  body: Mutex<Vec<u8>>,
+
+  done_tx: Mutex<Option<oneshot::Sender<ResponseParts>>>,
+
+  on_aborted: Mutex<Option<Arc<ThreadsafeFunction<(), ()>>>>,
+  on_data: Mutex<Option<Arc<ThreadsafeFunction<(Buffer, bool), ()>>>>,
+  on_writable: Mutex<Option<Arc<ThreadsafeFunction<(u32,), bool>>>>,
+
+  write_offset: AtomicU32,
+
+  // optional buffered request body (if you wire feeding)
+  req_body: Mutex<Vec<u8>>,
+}
+
+impl Inner {
+  fn new(tx: oneshot::Sender<ResponseParts>) -> Self {
+    Self {
+      status: AtomicU16::new(200),
+      aborted: AtomicBool::new(false),
+      ended: AtomicBool::new(false),
+      headers: Mutex::new(Vec::new()),
+      body: Mutex::new(Vec::new()),
+      done_tx: Mutex::new(Some(tx)),
+      on_aborted: Mutex::new(None),
+      on_data: Mutex::new(None),
+      on_writable: Mutex::new(None),
+      write_offset: AtomicU32::new(0),
+      req_body: Mutex::new(Vec::new()),
+    }
+  }
+}
+
 #[napi]
+#[derive(Clone)]
 pub struct JsResponse {
-  status: u16,
-  headers: HashMap<String, String>,
-  body_sender: Option<mpsc::Sender<Vec<u8>>>,
-  completed: bool,
-  corked: RefCell<bool>,
-  cork_buffer: RefCell<CorkBuffer>,
-  abort_callbacks: RefCell<Vec<Arc<ThreadsafeFunction<(), ()>>>>,
-  aborted: RefCell<bool>,
-  write_offset: RefCell<u32>,
-  on_data_callbacks: RefCell<Vec<Arc<ThreadsafeFunction<(Buffer, bool), ()>>>>,
+  inner: Arc<Inner>,
+}
+
+impl JsResponse {
+  pub fn new_oneshot() -> (Self, oneshot::Receiver<ResponseParts>) {
+    let (tx, rx) = oneshot::channel();
+    (
+      Self {
+        inner: Arc::new(Inner::new(tx)),
+      },
+      rx,
+    )
+  }
+
+  /// Internal: mark aborted + fire callback if set.
+  pub fn abort(&self) {
+    if !self.inner.aborted.swap(true, Ordering::SeqCst) {
+      if let Some(cb) = self.inner.on_aborted.lock().unwrap().as_ref() {
+        cb.call(Ok(()), ThreadsafeFunctionCallMode::NonBlocking);
+      }
+    }
+  }
+
+  /// Internal: feed request body chunks to onData and buffer for readJson.
+  pub fn feed_request_data(&self, chunk: &[u8], is_last: bool) {
+    {
+      let mut buf = self.inner.req_body.lock().unwrap();
+      buf.extend_from_slice(chunk);
+    }
+
+    if let Some(cb) = self.inner.on_data.lock().unwrap().as_ref() {
+      cb.call(
+        Ok((Buffer::from(chunk.to_vec()), is_last)),
+        ThreadsafeFunctionCallMode::NonBlocking,
+      );
+    }
+  }
+
+  fn append_body_bytes(&self, bytes: &[u8]) {
+    let mut body = self.inner.body.lock().unwrap();
+    body.extend_from_slice(bytes);
+    self
+      .inner
+      .write_offset
+      .fetch_add(bytes.len() as u32, Ordering::Relaxed);
+  }
+
+  fn finish_if_needed(&self) {
+    if self.inner.ended.swap(true, Ordering::SeqCst) {
+      return;
+    }
+
+    let status = self.inner.status.load(Ordering::Relaxed);
+    let headers = std::mem::take(&mut *self.inner.headers.lock().unwrap());
+    let body = std::mem::take(&mut *self.inner.body.lock().unwrap());
+
+    if let Some(tx) = self.inner.done_tx.lock().unwrap().take() {
+      let _ = tx.send(ResponseParts {
+        status,
+        headers,
+        body,
+      });
+    }
+  }
 }
 
 #[napi]
 impl JsResponse {
-  pub fn new(sender: mpsc::Sender<Vec<u8>>) -> Self {
-    Self {
-      status: 200,
-      headers: HashMap::new(),
-      body_sender: Some(sender),
-      completed: false,
-      corked: RefCell::new(false),
-      cork_buffer: RefCell::new(CorkBuffer::default()),
-      abort_callbacks: RefCell::new(Vec::new()),
-      aborted: RefCell::new(false),
-      write_offset: RefCell::new(0),
-      on_data_callbacks: RefCell::new(Vec::new()),
-    }
-  }
-
-  /// Check if currently in corked state
-  fn is_corked(&self) -> bool {
-    *self.corked.borrow()
-  }
-
-  /// Trigger all abort callbacks
-  fn trigger_abort_callbacks(&self) {
-    for callback in self.abort_callbacks.borrow().iter() {
-      callback.call(Ok(()), ThreadsafeFunctionCallMode::NonBlocking);
-    }
-  }
-
-  /// Mark response as aborted and trigger callbacks
-  fn abort(&self) {
-    *self.aborted.borrow_mut() = true;
-    self.trigger_abort_callbacks();
-  }
-
-  /// Flush all buffered operations
-  fn flush_cork_buffer(&mut self) {
-    let buffer = std::mem::take(&mut *self.cork_buffer.borrow_mut());
-
-    // Apply buffered status
-    if let Some(status) = buffer.status {
-      self.status = status;
-    }
-
-    // Apply buffered headers
-    for (key, value) in buffer.headers {
-      self.headers.insert(key, value);
-    }
-
-    // Send all buffered body chunks in one batch
-    if let Some(ref sender) = self.body_sender {
-      // Combine all chunks into one for efficiency
-      if !buffer.body_chunks.is_empty() {
-        let total_size: usize = buffer.body_chunks.iter().map(|c| c.len()).sum();
-        let mut combined = Vec::with_capacity(total_size);
-        for chunk in buffer.body_chunks {
-          combined.extend(chunk);
-        }
-        let _ = sender.try_send(combined);
-      }
-    }
-
-    // Handle end if requested
-    if buffer.should_end && !self.completed {
-      if let Some(ref sender) = self.body_sender {
-        if let Some(end_data) = buffer.end_data {
-          let _ = sender.try_send(end_data);
-        }
-      }
-      self.body_sender = None;
-      self.completed = true;
-    }
-  }
-
+  // writeStatus(status: string): this;
   #[napi]
-  pub fn write_status(&mut self, status: String) -> &Self {
+  pub fn write_status(&self, status: String) -> Self {
     let code = status
       .split_whitespace()
       .next()
-      .and_then(|s| s.parse().ok())
+      .and_then(|s| s.parse::<u16>().ok())
       .unwrap_or(200);
 
-    if self.is_corked() {
-      self.cork_buffer.borrow_mut().status = Some(code);
-    } else {
-      self.status = code;
-    }
-    self
+    self.inner.status.store(code, Ordering::Relaxed);
+    self.clone()
   }
 
+  // writeHeader(key: string, value: string): this;
   #[napi]
-  pub fn write_header(&mut self, key: String, value: String) -> &Self {
-    if self.is_corked() {
-      self.cork_buffer.borrow_mut().headers.push((key, value));
-    } else {
-      self.headers.insert(key, value);
-    }
-    self
+  pub fn write_header(&self, key: String, value: String) -> Self {
+    self.inner.headers.lock().unwrap().push((key, value));
+    self.clone()
   }
 
+  // write(chunk: string | ArrayBuffer): boolean;
   #[napi]
-  pub fn on_aborted(&mut self, callback: Function<(), ()>) -> Result<()> {
-    // Convert to ThreadsafeFunction for safe callback across threads
-    let tsfn: Arc<ThreadsafeFunction<(), ()>> = Arc::new(
-      callback
-        .build_threadsafe_function()
-        .callee_handled::<true>()
-        .build()?,
-    );
-
-    // If already aborted, call immediately
-    if *self.aborted.borrow() {
-      tsfn.call(Ok(()), ThreadsafeFunctionCallMode::NonBlocking);
-    } else {
-      // Otherwise, register for future abort
-      self.abort_callbacks.borrow_mut().push(tsfn);
-    }
-
-    Ok(())
-  }
-
-  #[napi]
-  pub fn write(&mut self, data: Either<String, Buffer>) -> bool {
-    let bytes = match data {
-      Either::A(s) => s.into_bytes(),
-      Either::B(b) => b.into(),
-    };
-
-    let len = bytes.len() as u32;
-
-    if self.is_corked() {
-      let mut buffer = self.cork_buffer.borrow_mut();
-      buffer.body_chunks.push(bytes);
-      buffer.write_offset += len;
-      true
-    } else if let Some(ref sender) = self.body_sender {
-      let success = sender.try_send(bytes).is_ok();
-      if success {
-        *self.write_offset.borrow_mut() += len;
-      }
-      success
-    } else {
-      false
-    }
-  }
-
-  #[napi]
-  pub fn end(&mut self, data: Option<Either<String, Buffer>>) {
-    if self.completed {
-      return;
-    }
-
-    let end_bytes = data.map(|d| match d {
-      Either::A(s) => s.into_bytes(),
-      Either::B(b) => b.into(),
-    });
-
-    self.abort();
-    if self.is_corked() {
-      let mut buffer = self.cork_buffer.borrow_mut();
-      buffer.should_end = true;
-      buffer.end_data = end_bytes;
-    } else {
-      if let Some(ref sender) = self.body_sender {
-        if let Some(bytes) = end_bytes {
-          let _ = sender.try_send(bytes);
-        }
-      }
-      self.body_sender = None;
-      self.completed = true;
-    }
-  }
-
-  #[napi]
-  pub fn cork(&mut self, callback: Function<(), ()>) -> Result<()> {
-    // Enter corked state
-    *self.corked.borrow_mut() = true;
-
-    // Execute callback - all writes will be buffered
-    let result = callback.call(());
-
-    // Exit corked state
-    *self.corked.borrow_mut() = false;
-
-    // Flush all buffered operations in one batch
-    self.flush_cork_buffer();
-
-    result
-  }
-
-  #[napi]
-  pub fn try_end(&mut self, data: Buffer, total_size: u32) -> bool {
-    // If the stream is already completed, no further action is allowed.
-    if self.completed {
+  pub fn write(&self, chunk: Either<String, Buffer>) -> bool {
+    if self.inner.aborted.load(Ordering::Relaxed) || self.inner.ended.load(Ordering::Relaxed) {
       return false;
     }
 
-    // Convert Buffer into Vec<u8>
-    let bytes: Vec<u8> = data.into();
-    let len = bytes.len() as u32;
+    match chunk {
+      Either::A(s) => self.append_body_bytes(s.as_bytes()),
+      Either::B(buf) => self.append_body_bytes(&buf),
+    }
+    true
+  }
 
-    // If the stream is corked, store data until uncork happens later
-    if self.is_corked() {
-      let mut buffer = self.cork_buffer.borrow_mut();
-      buffer.body_chunks.push(bytes);
-      buffer.should_end = true;
-      buffer.total_size = total_size;
-      buffer.write_offset += len;
-      self.completed = true;
-      return true;
+  // end(body?: string | ArrayBuffer): void;
+  #[napi]
+  pub fn end(&self, body: Option<Either<String, Buffer>>) {
+    if self.inner.aborted.load(Ordering::Relaxed) {
+      return;
     }
 
-    // If we have an active sender, try sending the final chunk
-    if let Some(ref sender) = self.body_sender {
-      let send_result = sender.try_send(bytes).is_ok();
+    if !self.inner.ended.swap(true, Ordering::SeqCst) {
+      let status = self.inner.status.load(Ordering::Relaxed);
+      let headers = std::mem::take(&mut *self.inner.headers.lock().unwrap());
 
-      if send_result {
-        *self.write_offset.borrow_mut() += len;
-        self.body_sender = None;
-        self.completed = true;
+      let mut out: Vec<u8> = Vec::new();
+      if let Some(b) = body {
+        match b {
+          Either::A(s) => out.extend_from_slice(s.as_bytes()),
+          Either::B(buf) => out.extend_from_slice(&buf),
+        }
+        self
+          .inner
+          .write_offset
+          .store(out.len() as u32, Ordering::Relaxed);
       }
 
-      return send_result;
+      if let Some(tx) = self.inner.done_tx.lock().unwrap().take() {
+        let _ = tx.send(ResponseParts {
+          status,
+          headers,
+          body: out,
+        });
+      }
+
+      return;
     }
 
-    // If neither corking nor sender exists, we can't finalize
-    false
+    // If already ended, ignore
   }
 
+  // cork(callback: () => void): void;
   #[napi]
-  pub fn get_write_offset(&self) -> u32 {
-    if self.is_corked() {
-      self.cork_buffer.borrow().write_offset
-    } else {
-      *self.write_offset.borrow()
-    }
-  }
-
-  #[napi]
-  pub fn on_data(&mut self, callback: Function<(Buffer, bool), ()>) -> Result<()> {
-    let tsfn: Arc<ThreadsafeFunction<(Buffer, bool), ()>> = Arc::new(
-      callback
-        .build_threadsafe_function()
-        .callee_handled::<true>()
-        .build()?,
-    );
-    self.on_data_callbacks.borrow_mut().push(tsfn);
+  pub fn cork(&self, callback: Function<(), ()>) -> Result<()> {
+    callback.call(())?;
     Ok(())
   }
 
+  // isAborted(): boolean;
   #[napi]
   pub fn is_aborted(&self) -> bool {
-    self.body_sender.is_none()
+    self.inner.aborted.load(Ordering::Relaxed)
   }
 
-  #[napi(getter)]
-  pub fn aborted(&self) -> bool {
-    self.completed || self.body_sender.is_none()
-  }
+  // onAborted(callback: () => void): void;
+  #[napi]
+  pub fn on_aborted(&self, callback: Function<(), ()>) -> Result<()> {
+    let tsfn = callback
+      .build_threadsafe_function()
+      .callee_handled::<true>()
+      .build()?;
 
-  #[napi(setter)]
-  pub fn set_aborted(&mut self, value: bool) {
-    if value {
-      self.body_sender = None;
-      self.completed = true;
+    *self.inner.on_aborted.lock().unwrap() = Some(Arc::new(tsfn));
+
+    if self.inner.aborted.load(Ordering::Relaxed) {
+      if let Some(cb) = self.inner.on_aborted.lock().unwrap().as_ref() {
+        cb.call(Ok(()), ThreadsafeFunctionCallMode::NonBlocking);
+      }
     }
+
+    Ok(())
+  }
+
+  // onData(callback: (chunk: ArrayBuffer, isLast: boolean) => void): void;
+  #[napi]
+  pub fn on_data(&self, callback: Function<(Buffer, bool), ()>) -> Result<()> {
+    let tsfn = callback
+      .build_threadsafe_function()
+      .callee_handled::<true>()
+      .build()?;
+
+    *self.inner.on_data.lock().unwrap() = Some(Arc::new(tsfn));
+    Ok(())
+  }
+
+  // getWriteOffset(): number;
+  #[napi]
+  pub fn get_write_offset(&self) -> u32 {
+    self.inner.write_offset.load(Ordering::Relaxed)
+  }
+
+  // tryEnd(data: ArrayBuffer | SharedArrayBuffer, totalSize: number): [boolean, boolean];
+  #[napi]
+  pub fn try_end(&self, data: Buffer, total_size: u32) -> (bool, bool) {
+    if self.inner.aborted.load(Ordering::Relaxed) || self.inner.ended.load(Ordering::Relaxed) {
+      return (false, true);
+    }
+
+    self.append_body_bytes(&data);
+
+    let current = self.inner.write_offset.load(Ordering::Relaxed);
+    let done = current >= total_size;
+    if done {
+      self.finish_if_needed();
+    }
+    (true, done)
+  }
+
+  // onWritable(callback: (offset: number) => boolean): void;
+  #[napi]
+  pub fn on_writable(&self, callback: Function<(u32,), bool>) -> Result<()> {
+    let tsfn = callback
+      .build_threadsafe_function()
+      .callee_handled::<true>()
+      .build()?;
+
+    *self.inner.on_writable.lock().unwrap() = Some(Arc::new(tsfn));
+    Ok(())
+  }
+
+  // readJson(contextType: string, cb: any, err: any): void;
+  #[napi]
+  pub fn read_json(
+    &self,
+    _context_type: String,
+    cb: Function<(String,), ()>,
+    err: Function<(String,), ()>,
+  ) -> Result<()> {
+    let body = self.inner.req_body.lock().unwrap();
+    if body.is_empty() {
+      err.call((
+        "readJson: no buffered request body yet (wire request body feeding)".to_string(),
+      ))?;
+      return Ok(());
+    }
+
+    let s = String::from_utf8_lossy(&body).to_string();
+    cb.call((s,))?;
+    Ok(())
   }
 }

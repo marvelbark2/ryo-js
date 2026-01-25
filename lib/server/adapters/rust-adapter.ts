@@ -235,7 +235,7 @@ export class RustAppAdapter implements ServerApp {
     }
 
     listen(port: number, callback?: (listenSocket: any) => void): this {
-        this.server.listen(port, (_: any, url: string) => {
+        this.server.listen(port, (url: string) => {
             console.log(`Rust server listening on ${url}`);
             callback?.(url);
         });

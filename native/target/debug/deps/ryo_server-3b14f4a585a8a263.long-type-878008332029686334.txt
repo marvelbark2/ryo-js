@@ -1,0 +1,2 @@
+ThreadsafeFunction<napi::bindgen_prelude::FnArgs<(response::JsResponse, request::JsRequest)>, ()>
+ThreadsafeFunction<napi::bindgen_prelude::FnArgs<(response::JsResponse, request::JsRequest)>, ()>: Clone

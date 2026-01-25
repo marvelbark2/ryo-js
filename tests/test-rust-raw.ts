@@ -14,12 +14,11 @@ if (!RyoServerInstance) {
 }
 const server = new RyoServerInstance.RyoServer();
 
-server.get("/ping", (_: any, res: any) => {
+server.get("/ping", (_, res: any) => {
     res.end("pong");
-
 });
 
 //@ts-ignore
-server.listen(3000, (_: any, url: string) => {
+server.listen(3000, (url: string) => {
     console.log(`Rust server listening on http://${url}`);
 });

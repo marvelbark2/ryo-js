@@ -1,24 +1,39 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
+use once_cell::sync::OnceCell;
 use std::sync::Arc;
 
+use tokio::runtime::Runtime;
+
+use ryo_core::{Server, router::Router};
+
+mod dispatcher;
+mod registry;
 mod request;
 mod response;
-mod router;
-mod static_files;
 
-use router::{RouteHandler, Router};
-use crate::{request::JsRequest, response::JsResponse};
+use dispatcher::NapiDispatcher;
+use registry::HandlerRegistry;
 
+/// Single Tokio runtime for the whole process
+static RUNTIME: OnceCell<Runtime> = OnceCell::new();
 
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-/// The main server class exposed to JavaScript
+fn runtime() -> &'static Runtime {
+  RUNTIME.get_or_init(|| {
+    tokio::runtime::Builder::new_multi_thread()
+      .worker_threads(num_cpus::get() / 2)
+      .enable_all()
+      .build()
+      .expect("failed to create Tokio runtime")
+  })
+}
+
 #[napi]
 pub struct RyoServer {
-  router: Router,                 // mutable only during setup
-  static_dir: Option<Arc<str>>
+  router: Router,
+  registry: Arc<HandlerRegistry>,
+  static_dir: Option<Arc<str>>,
 }
 
 #[napi]
@@ -27,117 +42,68 @@ impl RyoServer {
   pub fn new() -> Self {
     Self {
       router: Router::new(),
+      registry: Arc::new(HandlerRegistry::new()),
       static_dir: None,
     }
   }
 
-  /// Set the directory for static file serving
   #[napi]
   pub fn set_static_dir(&mut self, dir: String) {
     self.static_dir = Some(Arc::<str>::from(dir));
   }
 
-  /// Register a GET route handler
   #[napi]
   pub fn get(
     &mut self,
-    pattern: String,
-    handler: Function<FnArgs<(JsResponse, JsRequest)>, ()>,
+    path: String,
+    handler: Function<FnArgs<(response::JsResponse, request::JsRequest)>, ()>,
   ) -> Result<()> {
-    let handler = RouteHandler::new(handler)?;
-    self.router.add_route("GET", &pattern, handler);
-    Ok(())
+    self.add_route("GET", path, handler)
   }
 
-  /// Register a POST route handler
   #[napi]
   pub fn post(
     &mut self,
-    pattern: String,
-    handler: Function<FnArgs<(JsResponse, JsRequest)>, ()>,
+    path: String,
+    handler: Function<FnArgs<(response::JsResponse, request::JsRequest)>, ()>,
   ) -> Result<()> {
-    let handler = RouteHandler::new(handler)?;
-    self.router.add_route("POST", &pattern, handler);
-    Ok(())
+    self.add_route("POST", path, handler)
   }
 
-  /// Register a handler for any HTTP method
-  #[napi]
-  pub fn any(
+  fn add_route(
     &mut self,
-    pattern: String,
-    handler: Function<FnArgs<(JsResponse, JsRequest)>, ()>,
+    method: &str,
+    path: String,
+    handler: Function<FnArgs<(response::JsResponse, request::JsRequest)>, ()>,
   ) -> Result<()> {
-    let handler = RouteHandler::new(handler)?;
-    for method in ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"] {
-      self.router.add_route(method, &pattern, handler.clone());
-    }
+    let tsfn = handler
+      .build_threadsafe_function()
+      .callee_handled::<true>()
+      .build()?;
+
+    let id = Arc::get_mut(&mut self.registry)
+      .expect("cannot add routes after server start")
+      .register(tsfn);
+
+    self.router.add_route(method, &path, id);
     Ok(())
   }
 
-  /// Start the server
+  /// Start the HTTP server
   #[napi]
-  pub fn listen(&mut self, port: u16) -> Result<()> {
-    let router = Arc::new(self.router.clone());
-    let static_dir = self.static_dir.clone();
+  pub fn listen(&mut self, port: u16, callback: Option<Function<(String,), ()>>) -> Result<()> {
+    let dispatcher = Arc::new(NapiDispatcher::new(self.registry.clone()));
 
-    let rt = tokio::runtime::Builder::new_multi_thread()
-      // fewer threads = better tail latency
-      .worker_threads(num_cpus::get() / 2)
-      .enable_all()
-      .build()
-      .map_err(|e| Error::from_reason(format!("Failed to create runtime: {e}")))?;
+    let server = Server::new(self.router.clone(), self.static_dir.clone(), dispatcher);
 
-    rt.spawn(async move {
-      let app = axum::Router::new().fallback(move |req| {
-        handle_request(req, router.clone(), static_dir.clone())
-      });
-
-      let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
-      let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-
-      println!("[V2] Rust server listening on http://0.0.0.0:{port}");
-
-      axum::serve(listener, app).await.unwrap();
+    runtime().spawn(async move {
+      server.listen(port).await;
     });
 
-    // Keep runtime alive for Node.js lifetime
-    std::mem::forget(rt);
+    if let Some(cb) = callback {
+      cb.call((format!("localhost:{}", port),))?;
+    }
+
     Ok(())
-  }
-}
-
-async fn handle_request(
-  req: axum::extract::Request,
-  router: Arc<Router>,
-  static_dir: Option<Arc<str>>,
-) -> axum::response::Response {
-  let method = req.method().as_str();
-  let path = req.uri().path();
-
-  // Static files first (cheap early-exit)
-  if let Some(dir) = static_dir.as_deref() {
-    if let Some(response) = static_files::try_serve(dir, path).await {
-      return response;
-    }
-  }
-
-  // Lock-free route lookup
-  if let Some((handler, params)) = router.match_route(method, path) {
-    match handler.call(req, params).await {
-      Ok(response) => response,
-      Err(err) => {
-        eprintln!("Handler error: {err}");
-        axum::response::Response::builder()
-          .status(500)
-          .body(axum::body::Body::from("Internal Server Error"))
-          .unwrap()
-      }
-    }
-  } else {
-    axum::response::Response::builder()
-      .status(404)
-      .body(axum::body::Body::from("Not Found"))
-      .unwrap()
   }
 }

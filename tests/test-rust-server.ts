@@ -3,9 +3,7 @@ import { createRustServer } from "../lib/server/adapters/rust-adapter"
 const app = createRustServer();
 
 app.get("/ping", (res) => {
-    res.cork(() => {
-        res.end("pong");
-    })
+    res.end("pong");
 });
 
 app.listen(3000, (address) => {

@@ -1,0 +1,13 @@
+[workspace]
+members = [
+  "ryo-core",
+  "ryo-server",
+]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
