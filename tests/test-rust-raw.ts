@@ -19,6 +19,7 @@ server.get("/ping", (_: any, res: any) => {
 
 });
 
+//@ts-ignore
 server.listen(3000, (_: any, url: string) => {
     console.log(`Rust server listening on http://${url}`);
 });

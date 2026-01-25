@@ -10,7 +10,7 @@
     "build:es2020": "tsc --module es2020 --target es2020 --outDir dist/es2020",
     "build:esm": "tsc --module es2020 --target es5 --outDir dist/esm",
     "build:cjs": "tsc --module commonjs --target es5 --outDir dist/cjs --isolatedModules true --declaration false",
-    "build:rust": "cd native/ryo-server && napi build --release --platform && cp *.node index.js index.d.ts ../../dist/cjs/native/ryo-server/",
+    "build:rust": "cd native/ryo-server && npm run build && cp *.node index.js index.d.ts ../../dist/cjs/native/ryo-server/",
     "build:rust:debug": "cd native/ryo-server && napi build",
     "prepublishOnly": "npm run build",
     "type-check": "tsc --noEmit",

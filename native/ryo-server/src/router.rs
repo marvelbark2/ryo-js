@@ -61,7 +61,7 @@ impl RouteHandler {
     )
   }
 }
-
+#[derive(Clone)]
 pub struct Router {
   routes: HashMap<String, HashMap<String, RouteHandler>>,
 }

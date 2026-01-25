@@ -36,5 +36,5 @@ export declare class RyoServer {
   /** Register a handler for any HTTP method */
   any(pattern: string, handler: (arg0: JsResponse, arg1: JsRequest) => void): void
   /** Start the server */
-  listen(port: number): Promise<void>
+  listen(port: number): void
 }

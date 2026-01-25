@@ -12,9 +12,7 @@ crate-type = ["cdylib"]
 axum = "0.7"
 napi = { version = "3", features = [
   "async",
-  "serde-json",
-  "tokio_rt",
-  "tokio",
+  "serde-json"
 ] }
 napi-derive = "3.0.0"
 rustls = "0.22"
@@ -45,7 +43,7 @@ features = ["tokio"]
 
 [dependencies.tokio]
 version = "1"
-features = ["full"]
+features = ["rt-multi-thread", "net", "macros", "time"]
 
 [dependencies.tower]
 version = "0.4"
@@ -53,7 +51,7 @@ features = ["util"]
 
 [dependencies.tower-http]
 version = "0.5"
-features = ["fs", "cors", "compression-gzip"]
+features = ["fs"]
 
 [dependencies.tokio-util]
 version = "0.7"
@@ -63,8 +61,8 @@ features = ["io"]
 napi-build = "2"
 
 [profile.release]
-#lto = true
-strip = "symbols"
+lto = "fat"
+opt-level = 3
 codegen-units = 1
-split-debuginfo = "off"
 panic = "abort"
+strip = "symbols"
