@@ -2,13 +2,10 @@ use std::sync::Arc;
 
 use axum::{body::Body, extract::Request, http::StatusCode, response::Response};
 
-use futures::future::BoxFuture;
-
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
 
 use ryo_core::dispatch::JsDispatcher;
-use ryo_core::router::RouteMatch;
 
 use crate::registry::HandlerRegistry;
 use crate::request::JsRequest;
@@ -25,14 +22,14 @@ impl NapiDispatcher {
 }
 
 impl JsDispatcher for NapiDispatcher {
-  fn dispatch(&self, req: Request, route: RouteMatch<'_>) -> BoxFuture<'static, Response> {
-    let handler = self.registry.get(route.handler_id);
+  async fn dispatch(
+    &self,
+    req: Request,
+    handler_id: u32,
+    params: Option<Vec<(String, String)>>,
+  ) -> Response {
+    let handler = self.registry.get(handler_id);
     let tsfn = Arc::clone(&handler.tsfn);
-
-    let mut params: Vec<(String, String)> = Vec::new();
-    for (k, v) in route.params.iter() {
-      params.push((k.to_string(), v.to_string()));
-    }
 
     let (js_res, body_rx) = JsResponse::new_oneshot();
     let js_req = JsRequest::from_axum(&req, params);
@@ -44,20 +41,18 @@ impl JsDispatcher for NapiDispatcher {
       ThreadsafeFunctionCallMode::NonBlocking,
     );
 
-    Box::pin(async move {
-      match body_rx.await {
-        Ok(parts) => {
-          let mut builder = Response::builder().status(parts.status);
-          for (k, v) in parts.headers {
-            builder = builder.header(k, v);
-          }
-          builder.body(Body::from(parts.body)).unwrap()
+    match body_rx.await {
+      Ok(parts) => {
+        let mut builder = Response::builder().status(parts.status);
+        for (k, v) in parts.headers {
+          builder = builder.header(k, v);
         }
-        Err(_) => Response::builder()
-          .status(StatusCode::INTERNAL_SERVER_ERROR)
-          .body(Body::from("Handler failed"))
-          .unwrap(),
+        builder.body(Body::from(parts.body)).unwrap()
       }
-    })
+      Err(_) => Response::builder()
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .body(Body::from("Handler failed"))
+        .unwrap(),
+    }
   }
 }

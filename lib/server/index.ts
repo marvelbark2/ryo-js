@@ -5,7 +5,7 @@ export type ServerBackend = "uws" | "rust" | "node";
 
 export function createServer(
     backend: ServerBackend = "uws",
-    options?: { ssl?: boolean; key?: string; cert?: string }
+    options?: { ssl?: boolean; key?: string; cert?: string, outDir?: string }
 ): ServerApp {
     switch (backend) {
         case "uws":

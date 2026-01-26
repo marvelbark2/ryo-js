@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::{
     Router as AxumRouter,
-    extract::Request,
+    extract::{Request, State},
     response::{IntoResponse, Response},
 };
 use tokio::net::TcpListener;
@@ -19,29 +19,33 @@ use router::Router;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+struct AppState<D: JsDispatcher> {
+    router: Router,
+    static_dir: Option<Box<str>>,
+    dispatcher: D,
+}
+
 pub struct Server<D: JsDispatcher> {
-    router: Arc<Router>,
-    static_dir: Option<Arc<str>>,
-    dispatcher: Arc<D>,
+    state: Arc<AppState<D>>,
 }
 
 impl<D: JsDispatcher> Server<D> {
-    pub fn new(router: Router, static_dir: Option<Arc<str>>, dispatcher: Arc<D>) -> Self {
+    pub fn new(router: Router, static_dir: Option<Box<str>>, dispatcher: D) -> Self {
         Self {
-            router: Arc::new(router),
-            static_dir,
-            dispatcher,
+            state: Arc::new(AppState {
+                router,
+                static_dir,
+                dispatcher,
+            }),
         }
     }
 
     pub async fn listen(self, port: u16) {
-        let router = self.router.clone();
-        let static_dir = self.static_dir.clone();
-        let dispatcher = self.dispatcher.clone();
-
-        let app = AxumRouter::new().fallback(move |req: Request| {
-            handle_request(req, router.clone(), static_dir.clone(), dispatcher.clone())
-        });
+        let app = AxumRouter::new()
+            .fallback(|state: State<Arc<AppState<D>>>, req: Request| async move {
+                handle_request::<D>(state, req).await
+            })
+            .with_state(self.state);
 
         let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
         let listener = TcpListener::bind(addr)
@@ -54,32 +58,38 @@ impl<D: JsDispatcher> Server<D> {
     }
 }
 
-#[inline(always)]
 async fn handle_request<D: JsDispatcher>(
+    State(state): State<Arc<AppState<D>>>,
     req: Request,
-    router: Arc<Router>,
-    static_dir: Option<Arc<str>>,
-    dispatcher: Arc<D>,
 ) -> Response {
-    let method = req.method().clone();
-    let path = req.uri().path().to_owned();
+    let uri = req.uri().clone();
+    let path = uri.path(); // &str, no alloc
+    let method = req.method().as_str();
 
-    // Static files
-    if let Some(dir) = static_dir.as_deref() {
-        if let Some(resp) = static_files::try_serve(dir, &path).await {
+    if let Some(dir) = state.static_dir.as_deref() {
+        if let Some(resp) = static_files::try_serve(dir, path).await {
             return resp;
         }
     }
 
-    // Route match
-    if let Some(route) = router.match_route(method.as_str(), &path) {
-        return dispatcher.dispatch(req, route).await;
+    if let Some(route) = state.router.match_route(method, path) {
+        let handler_id = route.handler_id;
+
+        let params = if route.params.is_empty() {
+            None
+        } else {
+            let mut p = Vec::new();
+            for (k, v) in route.params.iter() {
+                p.push((k.to_string(), v.to_string()));
+            }
+            Some(p)
+        };
+        return state.dispatcher.dispatch(req, handler_id, params).await;
     }
 
     not_found()
 }
 
-#[inline(always)]
 fn not_found() -> Response {
     (axum::http::StatusCode::NOT_FOUND, "Not Found").into_response()
 }

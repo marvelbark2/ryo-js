@@ -1,12 +1,11 @@
-use axum::extract::Request;
-use axum::response::Response;
-
-use crate::router::RouteMatch;
+use axum::{extract::Request, response::Response};
+use std::future::Future;
 
 pub trait JsDispatcher: Send + Sync + 'static {
-  fn dispatch(
-    &self,
-    req: Request,
-    route: RouteMatch<'_>,
-  ) -> futures::future::BoxFuture<'static, Response>;
+    fn dispatch(
+        &self,
+        req: Request,
+        handler_id: u32,
+        params: Option<Vec<(String, String)>>,
+    ) -> impl Future<Output = Response> + Send;
 }

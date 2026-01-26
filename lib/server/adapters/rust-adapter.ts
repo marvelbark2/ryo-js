@@ -1,3 +1,4 @@
+import path from "path";
 import type { ServerRequest, ServerResponse, ServerApp, WebSocketBehavior } from "../interfaces";
 
 // This will be the compiled Rust addon
@@ -11,11 +12,13 @@ try {
     RyoServer = null;
 }
 
+type RustRyoRequest = import("../../../native/ryo-server").JsRequest;
+
 class RustRequestAdapter implements ServerRequest {
     private _queryParams: Record<string, string> | null = null;
     private _headers: Record<string, string> | null = null;
 
-    constructor(private readonly inner: any) { }
+    constructor(private readonly inner: RustRyoRequest) { }
 
     getMethod(): string {
         return this.inner.getMethod();
@@ -61,7 +64,7 @@ class RustRequestAdapter implements ServerRequest {
     }
 
     getParameter(index: number): string {
-        throw new Error("Method not implemented. " + index);
+        return this.inner.getParameter(index);
     }
 
     forEach(callback: (key: string, value: string) => void): void {
@@ -175,11 +178,13 @@ const METHOD_REGISTRARS: Record<string, string> = {
 export class RustAppAdapter implements ServerApp {
     private readonly server: any;
 
-    constructor(options?: { ssl?: boolean; key?: string; cert?: string }) {
+    constructor(options?: { ssl?: boolean; key?: string; cert?: string, outDir?: string }) {
         if (!RyoServer) {
             throw new Error("Rust server module not available");
         }
-        this.server = new RyoServer.RyoServer();
+
+        const staticDir = path.join(process.cwd(), options?.outDir ?? ".ssr", "output", "static");
+        this.server = new RyoServer.RyoServer(staticDir);
 
         if (options?.ssl) {
             this.server.setSsl(options.key, options.cert);

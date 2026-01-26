@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 
+[[bin]]
+name = "ryo-core-test"
+path = "src/main.rs"
+
+
 [dependencies]
 # --- HTTP / server stack ---
 axum = "0.7"

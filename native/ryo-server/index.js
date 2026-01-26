@@ -576,5 +576,7 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.JsRequest = nativeBinding.JsRequest
 module.exports.JsResponse = nativeBinding.JsResponse
+module.exports.Param = nativeBinding.Param
 module.exports.RyoServer = nativeBinding.RyoServer

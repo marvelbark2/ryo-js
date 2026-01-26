@@ -56,6 +56,7 @@ export default async function server(env = "production") {
         ssl: !!ryoConfig.ssl,
         key: ryoConfig.ssl?.key_file_name,
         cert: ryoConfig.ssl?.cert_file_name,
+        outDir: ryoConfig.build?.outDir
     });
 
     const ssrdir = join(pwd, ryoConfig.build?.outDir ?? ".ssr");

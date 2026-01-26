@@ -33,23 +33,23 @@ fn runtime() -> &'static Runtime {
 pub struct RyoServer {
   router: Router,
   registry: Arc<HandlerRegistry>,
-  static_dir: Option<Arc<str>>,
+  static_dir: Option<Box<str>>,
 }
 
 #[napi]
 impl RyoServer {
   #[napi(constructor)]
-  pub fn new() -> Self {
+  pub fn new(static_dir: String) -> Self {
     Self {
       router: Router::new(),
       registry: Arc::new(HandlerRegistry::new()),
-      static_dir: None,
+      static_dir: Some(Box::<str>::from(static_dir)),
     }
   }
 
   #[napi]
   pub fn set_static_dir(&mut self, dir: String) {
-    self.static_dir = Some(Arc::<str>::from(dir));
+    self.static_dir = Some(Box::<str>::from(dir));
   }
 
   #[napi]
@@ -92,7 +92,7 @@ impl RyoServer {
   /// Start the HTTP server
   #[napi]
   pub fn listen(&mut self, port: u16, callback: Option<Function<(String,), ()>>) -> Result<()> {
-    let dispatcher = Arc::new(NapiDispatcher::new(self.registry.clone()));
+    let dispatcher = NapiDispatcher::new(self.registry.clone());
 
     let server = Server::new(self.router.clone(), self.static_dir.clone(), dispatcher);
 
